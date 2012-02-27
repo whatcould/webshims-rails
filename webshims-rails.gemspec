@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.version     = Webshims::Rails::VERSION
   s.authors     = ["David Reese"]
   s.email       = ["work@whatcould.com"]
-  s.homepage    = ""
+  s.homepage    = "https://github.com/whatcould/webshims-rails"
   s.summary     = %q{Webshims lib packaged as a Rails engine}
   s.description = %q{Makes it simple to include the webshims js library (by Alexander Farkas) in the Rails asset pipeline.}
 
