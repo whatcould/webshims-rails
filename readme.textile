@@ -1,0 +1,26 @@
+h1. Webshims-rails
+
+Easily include the "webshims library":http://aFarkas.github.com/webshim/demos/index.html (by Alexander Farkas) in your Rails 3.1+ project with the asset pipeline.
+
+h2. Usage
+
+1. Add webshims-rails to your Gemfile for bundler: @gem 'webshims-rails'@
+2. Require modernizr and the webshims polyfiller, eg, in your application.js:
+
+<pre>
+//= require webshims/minified/extras/modernizr-custom
+//= require webshims/minified/polyfiller
+</pre>
+
+3. In your javascript, after the polyfiller has been required, set the basePath for webshims as shown below, and then call $.webshims.polyfill(); see webshims docs for more options.
+(Note that this should be run directly, not in a dom-ready block.)
+
+<pre>
+  $.webshims.setOptions('basePath', '/assets/webshims/minified/shims/')
+  $.webshims.polyfill()
+</pre>
+
+
+h2. License
+
+MIT licensed, like the Webshims library.
