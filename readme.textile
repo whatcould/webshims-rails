@@ -7,6 +7,8 @@ h2. Usage
 1. Add webshims-rails to your Gemfile for bundler: @gem 'webshims-rails'@
 2. Require modernizr and the webshims polyfiller, eg, in your application.js:
 
+*Update note:* Previous webshims-rails included only the minified versions; this was incorrect, since the dev (unminified) versions should be required by Sprockets and then the Rails asset pipeline will compress as necessary in production. Users of previous webshims-rails versions should update their sprockets requires and webshims options as below (though I'll leave the minified assets in there to prevent errors).
+
 <pre>
 //= require webshims/dev/extras/modernizr-custom
 //= require webshims/dev/polyfiller
