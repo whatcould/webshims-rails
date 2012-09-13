@@ -8,15 +8,15 @@ h2. Usage
 2. Require modernizr and the webshims polyfiller, eg, in your application.js:
 
 <pre>
-//= require webshims/minified/extras/modernizr-custom
-//= require webshims/minified/polyfiller
+//= require webshims/dev/extras/modernizr-custom
+//= require webshims/dev/polyfiller
 </pre>
 
 3. In your javascript, after the polyfiller has been required, set the basePath for webshims as shown below, and then call $.webshims.polyfill(); see webshims docs for more options.
 (Note that this should be run directly, not in a dom-ready block.)
 
 <pre>
-  $.webshims.setOptions('basePath', '/assets/webshims/minified/shims/')
+  $.webshims.setOptions('basePath', '/assets/webshims/dev/shims/')
   $.webshims.polyfill()
 </pre>
 

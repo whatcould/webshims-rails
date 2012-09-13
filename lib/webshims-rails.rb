@@ -6,7 +6,7 @@ module Webshims
       # Everything in the webshims directory should be precompiled, since
       # it all needs to be accessed dynamically depending on the browser
       initializer :append_webshims_assets_path, :group => :all do |app|
-        app.config.assets.precompile << /webshims\/minified/ 
+        app.config.assets.precompile << /webshims\/dev/ 
       end
     end
   end
