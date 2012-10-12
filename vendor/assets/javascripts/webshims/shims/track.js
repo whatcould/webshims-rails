@@ -1,11 +1,12 @@
 jQuery.webshims.register('track', function($, webshims, window, document, undefined){
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
-	var showTracks = {subtitles: 1, captions: 1};
+	//descriptions are not really shown, but they are inserted into the dom
+	var showTracks = {subtitles: 1, captions: 1, descriptions: 1};
 	var notImplemented = function(){
 		webshims.error('not implemented yet');
 	};
-	
+	var supportTrackMod = Modernizr.ES5 && Modernizr.objectAccessor;
 	var createEventTarget = function(obj){
 		var eventList = {};
 		obj.addEventListener = function(name, fn){
@@ -39,6 +40,7 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 			return cue;
 		}
 	};
+	
 	var textTrackProto = {
 		shimActiveCues: null,
 		_shimActiveCues: null,
@@ -62,13 +64,33 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 					webshims.error("cue startTime higher than previous cue's startTime");
 				}
 			}
-			if(cue.track){
-				webshims.error("cue already part of a track element");
+			if(cue.track && cue.track.removeCue){
+				cue.track.removeCue(cue);
 			}
 			cue.track = this;
 			this.cues.push(cue);
 		},
-		removeCue: notImplemented,
+		//ToDo: make it more dynamic
+		removeCue: function(cue){
+			var cues = this.cues || [];
+			var i = 0;
+			var len = cues.length;
+			if(cue.track != this){
+				webshims.error("cue not part of track");
+				return;
+			}
+			for(; i < len; i++){
+				if(cues[i] === cue){
+					cues.splice(i, 1);
+					cue.track = null;
+					break;
+				}
+			}
+			if(cue.track){
+				webshims.error("cue not part of track");
+				return;
+			}
+		},
 		DISABLED: 'disabled',
 		OFF: 'disabled',
 		HIDDEN: 'hidden',
@@ -79,10 +101,10 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 		NONE: 0
 	};
 	var copyProps = ['kind', 'label', 'srclang'];
+	var copyName = {srclang: 'language'};
 	
 	var owns = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
 	
-	//ToDo: add/remove event
 	var updateMediaTrackList = function(baseData, trackList){
 		var removed = [];
 		var added = [];
@@ -142,25 +164,19 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 	};
 	
 	var refreshTrack = function(track, trackData){
-		var mode, kind;
 		if(!trackData){
 			trackData = webshims.data(track, 'trackData');
 		}
 		if(trackData && !trackData.isTriggering){
 			trackData.isTriggering = true;
-			mode = (trackData.track || {}).mode; 
-			kind = (trackData.track || {}).kind; 
 			setTimeout(function(){
-				if(mode !== (trackData.track || {}).mode || kind != (trackData.track || {}).kind){
-					if(!(trackData.track || {}).readyState){
-						$(track).triggerHandler('checktrackmode');
-					} else {
-						$(track).parent().triggerHandler('updatetrackdisplay');
-					}
+				if(!(trackData.track || {}).readyState){
+					$(track).triggerHandler('checktrackmode');
+				} else {
+					$(track).closest('audio, video').triggerHandler('updatetrackdisplay');
 				}
 				trackData.isTriggering = false;
-				
-			}, 9);
+			}, 1);
 		}
 	};
 	
@@ -342,21 +358,40 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 		
 		if(!obj){
 			obj = createEventTarget(webshims.objectCreate(textTrackProto));
-			copyProps.forEach(function(copyProp){
-				var prop = $.prop(track, copyProp);
-				if(prop){
-					if(copyProp == 'srclang'){
-						copyProp = 'language';
+			
+			if(!supportTrackMod){
+				copyProps.forEach(function(copyProp){
+					var prop = $.prop(track, copyProp);
+					if(prop){
+						obj[copyName[copyProp] || copyProp] = prop;
 					}
-					obj[copyProp] = prop;
-				}
-			});
+				});
+			}
 			
 			
 			if(track.nodeName){
+				
+				if(supportTrackMod){
+					copyProps.forEach(function(copyProp){
+						webshims.defineProperty(obj, copyName[copyProp] || copyProp, {
+							get: function(){
+								return $.prop(track, copyProp);
+							}
+						});
+					});
+				}
+				
 				trackData = webshims.data(track, 'trackData', {track: obj});
-				mediaelement.loadTextTrack(mediaelem, track, trackData, $.prop(track, 'default'));
+				mediaelement.loadTextTrack(mediaelem, track, trackData, ($.prop(track, 'default') && $(track).siblings('track[default]').andSelf()[0] == track));
 			} else {
+				if(supportTrackMod){
+					copyProps.forEach(function(copyProp){
+						webshims.defineProperty(obj, copyName[copyProp] || copyProp, {
+							value: track[copyProp],
+							writeable: false
+						});
+					});
+				}
 				obj.cues = mediaelement.createCueList();
 				obj.activeCues = obj._shimActiveCues = obj.shimActiveCues = mediaelement.createCueList();
 				obj.mode = 'hidden';
@@ -409,7 +444,7 @@ modified for webshims
 				subtitleParts.shift();
 			}
 		
-			if (subtitleParts[0].match(/^\s*[a-z0-9]+\s*$/ig)) {
+			if (subtitleParts[0].match(/^\s*[a-z0-9-\_]+\s*$/ig)) {
 				// The identifier becomes the cue ID (when *we* load the cues from file. Programatically created cues can have an ID of whatever.)
 				id = String(subtitleParts.shift().replace(/\s*/ig,""));
 			}
@@ -446,6 +481,7 @@ modified for webshims
 
 			if (!timeIn && !timeOut) {
 				// We didn't extract any time information. Assume the cue is invalid!
+				webshims.warn("couldn't extract time information: "+[timeIn, timeOut, subtitleParts.join("\n"), id].join(' ; '));
 				return null;
 			}
 /*
@@ -488,64 +524,64 @@ modified for webshims
 	})();
 	
 	mediaelement.parseCaptions = function(captionData, track, complete) {
-			var subtitles = mediaelement.createCueList();
-			var cue, lazyProcess, regWevVTT;
-			var startDate;
-			var isWEBVTT;
-			if (captionData) {
+		var subtitles = mediaelement.createCueList();
+		var cue, lazyProcess, regWevVTT;
+		var startDate;
+		var isWEBVTT;
+		if (captionData) {
+			
+			regWevVTT = /^WEBVTT(\s*FILE)?/ig;
+			
+			lazyProcess = function(i, len){
 				
-				regWevVTT = /^WEBVTT(\s*FILE)?/ig;
-				
-				lazyProcess = function(i, len){
-					
-					for(; i < len; i++){
-						cue = captionData[i];
-						if(regWevVTT.test(cue)){
-							isWEBVTT = true;
-						} else if(cue.replace(/\s*/ig,"").length){
-							if(!isWEBVTT){
-								webshims.error('please use WebVTT format. This is the standard');
-								complete(null);
-								break;
-							}
-							cue = mediaelement.parseCaptionChunk(cue, i);
-							if(cue){
-								track.addCue(cue);
-							}
-						}
-						if(startDate < (new Date().getTime()) - 9){
-							i++;
-							setTimeout(function(){
-								startDate = new Date().getTime();
-								lazyProcess(i, len);
-							}, 90);
-							
-							break;
-						}
-					}
-					if(i >= len){
+				for(; i < len; i++){
+					cue = captionData[i];
+					if(regWevVTT.test(cue)){
+						isWEBVTT = true;
+					} else if(cue.replace(/\s*/ig,"").length){
 						if(!isWEBVTT){
 							webshims.error('please use WebVTT format. This is the standard');
+							complete(null);
+							break;
 						}
-						complete(track.cues);
+						cue = mediaelement.parseCaptionChunk(cue, i);
+						if(cue){
+							track.addCue(cue);
+						}
 					}
-				};
-				
-				captionData = captionData.replace(/\r\n/g,"\n");
-				
+					if(startDate < (new Date().getTime()) - 30){
+						i++;
+						setTimeout(function(){
+							startDate = new Date().getTime();
+							lazyProcess(i, len);
+						}, 90);
+						
+						break;
+					}
+				}
+				if(i >= len){
+					if(!isWEBVTT){
+						webshims.error('please use WebVTT format. This is the standard');
+					}
+					complete(track.cues);
+				}
+			};
+			
+			captionData = captionData.replace(/\r\n/g,"\n");
+			
+			setTimeout(function(){
+				captionData = captionData.replace(/\r/g,"\n");
 				setTimeout(function(){
-					captionData = captionData.replace(/\r/g,"\n");
-					setTimeout(function(){
-						startDate = new Date().getTime();
-						captionData = captionData.split(/\n\n+/g);
-						lazyProcess(0, captionData.length);
-					}, 9);
+					startDate = new Date().getTime();
+					captionData = captionData.split(/\n\n+/g);
+					lazyProcess(0, captionData.length);
 				}, 9);
-				
-			} else {
-				webshims.error("Required parameter captionData not supplied.");
-			}
-		};
+			}, 9);
+			
+		} else {
+			webshims.error("Required parameter captionData not supplied.");
+		}
+	};
 	
 	
 	mediaelement.createTrackList = function(mediaelem, baseData){
@@ -599,13 +635,26 @@ modified for webshims
 		}
 	});
 	
-	webshims.onNodeNamesPropertyModify('track', 'kind', function(){
-		var trackData = webshims.data(this, 'trackData');
-		if(trackData){
-			trackData.track.kind = $.prop(this, 'kind');
-			refreshTrack(this, trackData);
-		}
-	});
+	$.each(copyProps, function(i, copyProp){
+		var name = copyName[copyProp] || copyProp;
+		webshims.onNodeNamesPropertyModify('track', copyProp, function(){
+			var trackData = webshims.data(this, 'trackData');
+			var track = this;
+			if(trackData){
+				if(copyProp == 'kind'){
+					refreshTrack(this, trackData);
+				}
+				if(!supportTrackMod){
+					trackData.track[name] = $.prop(this, copyProp);
+				}
+				clearTimeout(trackData.changedTrackPropTimer);
+				trackData.changedTrackPropTimer = setTimeout(function(){
+					$(track).trigger('updatesubtitlestate');
+				}, 1); 
+			}
+		});
+	});		
+	
 	
 	webshims.onNodeNamesPropertyModify('track', 'src', function(val){
 		if(val){
@@ -653,7 +702,6 @@ modified for webshims
 	webshims.defineNodeNamesProperties(['audio', 'video'], {
 		textTracks: {
 			get: function(){
-				
 				var media = this;
 				var baseData = webshims.data(media, 'mediaelementBase') || webshims.data(media, 'mediaelementBase', {});
 				var tracks = mediaelement.createTrackList(media, baseData);

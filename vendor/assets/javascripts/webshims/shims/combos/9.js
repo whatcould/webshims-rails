@@ -388,7 +388,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 			var docObserve = {
 				init: false,
 				start: function(){
-					if(!this.init){
+					if(!this.init && document.body){
 						this.init = true;
 						this.height = $(document).height();
 						this.width = $(document).width();
@@ -400,7 +400,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 								docObserve.width = width;
 								handler({type: 'docresize'});
 							}
-						}, 400);
+						}, 600);
 					}
 				}
 			};
@@ -416,8 +416,10 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 						}
 						lastHeight = height;
 						lastWidth = width;
-						docObserve.height = $(document).height();
-						docObserve.width = $(document).width();
+						if(document.body){
+							docObserve.height = $(document).height();
+							docObserve.width = $(document).width();
+						}
 					}
 					$.event.trigger('updateshadowdom');
 				}, 40);
@@ -463,7 +465,9 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 					shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
 				}
 				opts = null;
-				docObserve.start();
+				webshims.ready('DOM', function(){
+					docObserve.start();
+				});
 			}
 		})(),
 		propTypes: {
@@ -607,7 +611,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 				}
 				if(propType){
 					if(descs[prop][propType]){
-						webshims.log('override: '+ name +'['+prop +'] for '+ propType);
+						//webshims.log('override: '+ name +'['+prop +'] for '+ propType);
 					} else {
 						descs[prop][propType] = {};
 						['value', 'set', 'get'].forEach(function(copyProp){
@@ -2252,7 +2256,7 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 						if(flash[0].offsetWidth > 1 && flash[0].offsetHeight > 1 && location.protocol.indexOf('file:') === 0){
 							webshims.error("Add your local development-directory to the local-trusted security sandbox:  http://www.macromedia.com/support/documentation/en/flashplayer/help/settings_manager04.html");
 						} else if(flash[0].offsetWidth < 2 || flash[0].offsetHeight < 2) {
-							webshims.info("JS-SWF connection can't be established on hidden or unconnected flash objects");
+							webshims.warn("JS-SWF connection can't be established on hidden or unconnected flash objects");
 						}
 						flash = null;
 					}, 8000);
