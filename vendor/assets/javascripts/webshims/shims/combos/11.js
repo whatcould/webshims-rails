@@ -384,50 +384,92 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 			var resizeTimer;
 			var lastHeight;
 			var lastWidth;
-			var handler;
+			
 			var docObserve = {
 				init: false,
+				runs: 0,
+				test: function(){
+					var height = docObserve.getHeight();
+					var width = docObserve.getWidth();
+					if(height != docObserve.height || width != docObserve.width){
+						docObserve.height = height;
+						docObserve.width = width;
+						docObserve.handler({type: 'docresize'});
+						docObserve.runs++;
+						if(docObserve.runs < 30){
+							setTimeout(docObserve.test, 30);
+						}
+					} else {
+						docObserve.runs = 0;
+					}
+				},
+				handler: function(e){
+					clearTimeout(resizeTimer);
+					resizeTimer = setTimeout(function(){
+						if(e.type == 'resize'){
+							var width = $(window).width();
+							var height = $(window).width();
+							if(height == lastHeight && width == lastWidth){
+								return;
+							}
+							lastHeight = height;
+							lastWidth = width;
+							
+							docObserve.height = docObserve.getHeight();
+							docObserve.width = docObserve.getWidth();
+							
+						}
+						$.event.trigger('updateshadowdom');
+					}, (e.type == 'resize') ? 50 : 9);
+				},
+				_create: function(){
+					$.each({ Height: "getHeight", Width: "getWidth" }, function(name, type){
+						var body = document.body;
+						var doc = document.documentElement;
+						docObserve[type] = function(){
+							return Math.max(
+								body[ "scroll" + name ], doc[ "scroll" + name ],
+								body[ "offset" + name ], doc[ "offset" + name ],
+								doc[ "client" + name ]
+							);
+						};
+					});
+				},
 				start: function(){
 					if(!this.init && document.body){
 						this.init = true;
-						this.height = $(document).height();
-						this.width = $(document).width();
-						setInterval(function(){
-							var height = $(document).height();
-							var width = $(document).width();
-							if(height != docObserve.height || width != docObserve.width){
-								docObserve.height = height;
-								docObserve.width = width;
-								handler({type: 'docresize'});
-							}
-						}, 600);
+						this._create();
+						this.height = docObserve.getHeight();
+						this.width = docObserve.getWidth();
+						setInterval(this.test, 400);
+						$(this.test);
+						$(window).bind('load', this.test);
+						$(window).bind('resize', this.handler);
+						(function(){
+							var oldAnimate = $.fn.animate;
+							var animationTimer;
+							
+							$.fn.animate = function(){
+								clearTimeout(animationTimer);
+								animationTimer = setTimeout(function(){
+									docObserve.test();
+									docObserve.handler({type: 'animationstart'});
+								}, 19);
+								
+								return oldAnimate.apply(this, arguments);
+							};
+						})();
 					}
 				}
 			};
 			
-			handler = function(e){
-				clearTimeout(resizeTimer);
-				resizeTimer = setTimeout(function(){
-					if(e.type == 'resize'){
-						var width = $(window).width();
-						var height = $(window).width();
-						if(height == lastHeight && width == lastWidth){
-							return;
-						}
-						lastHeight = height;
-						lastWidth = width;
-						if(document.body){
-							docObserve.height = $(document).height();
-							docObserve.width = $(document).width();
-						}
-					}
-					$.event.trigger('updateshadowdom');
-				}, 40);
-			};
-			$(window).bind('resize', handler);
 			
 			$.event.customEvent.updateshadowdom = true;
-			
+			webshims.docObserve = function(){
+				webshims.ready('DOM', function(){
+					docObserve.start();
+				});
+			};
 			return function(nativeElem, shadowElem, opts){
 				opts = opts || {};
 				if(nativeElem.jquery){
@@ -465,10 +507,8 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 					shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
 				}
 				opts = null;
-				webshims.ready('DOM', function(){
-					docObserve.start();
-				});
-			}
+				webshims.docObserve();
+			};
 		})(),
 		propTypes: {
 			standard: function(descs, name){
@@ -911,6 +951,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	}
 })(jQuery, document);
 jQuery.webshims.register('form-datalist', function($, webshims, window, document, undefined){
+	"use strict";
 	var doc = document;	
 
 	/*
@@ -1170,8 +1211,8 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 						data.shadowList.appendTo('body');
 					}
 					$(data.datalist)
-						.unbind('updateDatalist.datalistWidget')
-						.bind('updateDatalist.datalistWidget', $.proxy(data, '_resetListCached'))
+						.off('updateDatalist.datalistWidget')
+						.on('updateDatalist.datalistWidget', $.proxy(data, '_resetListCached'))
 					;
 					data._resetListCached();
 					return;
@@ -1220,7 +1261,7 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 						}
 						return (e.type != 'mousedown');
 					})
-					.bind('focusout', this.timedHide)
+					.on('focusout', this.timedHide)
 				;
 				
 				opts.input.setAttribute('autocomplete', 'off');
@@ -1230,73 +1271,74 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 						//role: 'combobox',
 						'aria-haspopup': 'true'
 					})
-					.bind('input.datalistWidget', function(){
-						if(!that.triggeredByDatalist){
-							that.changedValue = false;
-							that.showHideOptions();
-						}
-					})
-					
-					.bind('keydown.datalistWidget', function(e){
-						var keyCode = e.keyCode;
-						var activeItem;
-						var items;
-						if(keyCode == 40 && !that.showList()){
-							that.markItem(that.index + 1, true);
-							return false;
-						}
-						
-						if(!that.isListVisible){return;}
-						
-						 
-						if(keyCode == 38){
-							that.markItem(that.index - 1, true);
-							return false;
-						} 
-						if(!e.shiftKey && (keyCode == 33 || keyCode == 36)){
-							that.markItem(0, true);
-							return false;
-						} 
-						if(!e.shiftKey && (keyCode == 34 || keyCode == 35)){
-							items = $('li:not(.hidden-item)', that.shadowList);
-							that.markItem(items.length - 1, true, items);
-							return false;
-						} 
-						if(keyCode == 13 || keyCode == 27){
-							if (keyCode == 13){
-								activeItem = $('li.active-item:not(.hidden-item)', that.shadowList);
-								that.changeValue( $('li.active-item:not(.hidden-item)', that.shadowList) );
+					.on({
+						'input.datalistWidget': function(){
+							if(!that.triggeredByDatalist){
+								that.changedValue = false;
+								that.showHideOptions();
 							}
-							that.hideList();
-							if(formsCFG.customDatalist && activeItem && activeItem[0]){
-								$(opts.input).trigger('datalistselect');
+						},
+						'keydown.datalistWidget': function(e){
+							var keyCode = e.keyCode;
+							var activeItem;
+							var items;
+							if(keyCode == 40 && !that.showList()){
+								that.markItem(that.index + 1, true);
+								return false;
 							}
-							return false;
-						}
+							
+							if(!that.isListVisible){return;}
+							
+							 
+							if(keyCode == 38){
+								that.markItem(that.index - 1, true);
+								return false;
+							} 
+							if(!e.shiftKey && (keyCode == 33 || keyCode == 36)){
+								that.markItem(0, true);
+								return false;
+							} 
+							if(!e.shiftKey && (keyCode == 34 || keyCode == 35)){
+								items = $('li:not(.hidden-item)', that.shadowList);
+								that.markItem(items.length - 1, true, items);
+								return false;
+							} 
+							if(keyCode == 13 || keyCode == 27){
+								if (keyCode == 13){
+									activeItem = $('li.active-item:not(.hidden-item)', that.shadowList);
+									that.changeValue( $('li.active-item:not(.hidden-item)', that.shadowList) );
+								}
+								that.hideList();
+								if(formsCFG.customDatalist && activeItem && activeItem[0]){
+									$(opts.input).trigger('datalistselect');
+								}
+								return false;
+							}
+						},
+						'focus.datalistWidget': function(){
+							if($(this).hasClass('list-focus')){
+								that.showList();
+							}
+						},
+						'mousedown.datalistWidget': function(){
+							if($(this).is(':focus')){
+								that.showList();
+							}
+						},
+						'blur.datalistWidget': this.timedHide
 					})
-					.bind('focus.datalistWidget', function(){
-						if($(this).hasClass('list-focus')){
-							that.showList();
-						}
-					})
-					.bind('mousedown.datalistWidget', function(){
-						if($(this).is(':focus')){
-							that.showList();
-						}
-					})
-					.bind('blur.datalistWidget', this.timedHide)
 				;
 				
 				
 				$(this.datalist)
-					.unbind('updateDatalist.datalistWidget')
-					.bind('updateDatalist.datalistWidget', $.proxy(this, '_resetListCached'))
+					.off('updateDatalist.datalistWidget')
+					.on('updateDatalist.datalistWidget', $.proxy(this, '_resetListCached'))
 				;
 				
 				this._resetListCached();
 				
 				if(opts.input.form && (opts.input.name || opts.input.id)){
-					$(opts.input.form).bind('submit.datalistWidget'+opts.input.id, function(){
+					$(opts.input.form).on('submit.datalistWidget'+opts.input.id, function(){
 						if(!$(opts.input).hasClass('no-datalist-cache') && that._autocomplete != 'off'){
 							var val = $.prop(opts.input, 'value');
 							var name = (opts.input.name || opts.input.id) + $.prop(opts.input, 'type');
@@ -1310,21 +1352,21 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 						}
 					});
 				}
-				$(window).bind('unload.datalist'+this.id+' beforeunload.datalist'+this.id, function(){
+				$(window).on('unload.datalist'+this.id+' beforeunload.datalist'+this.id, function(){
 					that.destroy();
 				});
 			},
 			destroy: function(){
 				var autocomplete = $.attr(this.input, 'autocomplete');
 				$(this.input)
-					.unbind('.datalistWidget')
+					.off('.datalistWidget')
 					.removeData('datalistWidget')
 				;
 				this.shadowList.remove();
-				$(document).unbind('.datalist'+this.id);
-				$(window).unbind('.datalist'+this.id);
+				$(document).off('.datalist'+this.id);
+				$(window).off('.datalist'+this.id);
 				if(this.input.form && this.input.id){
-					$(this.input.form).unbind('submit.datalistWidget'+this.input.id);
+					$(this.input.form).off('submit.datalistWidget'+this.input.id);
 				}
 				this.input.removeAttribute('aria-haspopup');
 				if(autocomplete === undefined){
@@ -1353,6 +1395,9 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 						});
 					}
 				}
+			},
+			maskHTML: function(str){
+				return str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 			},
 			updateListOptions: function(_forceShow){
 				this.needsUpdate = false;
@@ -1401,7 +1446,7 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 				
 				for(rI = 0, rLen = allOptions.length; rI < rLen; rI++){
 					item = allOptions[rI];
-					list[rI] = '<li class="'+ item.className +'" style="'+ item.style +'" tabindex="-1" role="listitem"><span class="option-label">'+ item.text +'</span> <span class="option-value">'+item.value+'</span></li>';
+					list[rI] = '<li class="'+ item.className +'" style="'+ item.style +'" tabindex="-1" role="listitem"><span class="option-label">'+ this.maskHTML(item.text) +'</span> <span class="option-value">'+ this.maskHTML(item.value) +'</span></li>';
 				}
 				
 				this.arrayOptions = allOptions;
@@ -1482,8 +1527,8 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 				
 				$(window).unbind('.datalist'+that.id);
 				$(document)
-					.unbind('.datalist'+that.id)
-					.bind('mousedown.datalist'+that.id +' focusin.datalist'+that.id, function(e){
+					.off('.datalist'+that.id)
+					.on('mousedown.datalist'+that.id +' focusin.datalist'+that.id, function(e){
 						if(e.target === that.input ||  that.shadowList[0] === e.target || $.contains( that.shadowList[0], e.target )){
 							clearTimeout(that.hideTimer);
 							setTimeout(function(){
@@ -1493,7 +1538,7 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 							that.timedHide();
 						}
 					})
-					.bind('updateshadowdom.datalist'+that.id, function(){
+					.on('updateshadowdom.datalist'+that.id, function(){
 						that.setPos();
 					})
 				;
@@ -1524,7 +1569,7 @@ jQuery.webshims.register('form-datalist', function($, webshims, window, document
 				}
 				$(document).unbind('.datalist'+that.id);
 				$(window)
-					.unbind('.datalist'+that.id)
+					.off('.datalist'+that.id)
 					.one('resize.datalist'+that.id, function(){
 						that.shadowList.css({top: 0, left: 0});
 					})

@@ -36,7 +36,7 @@
 
 	
 	var webshims = {
-		version: '1.9.2',
+		version: '1.9.3',
 		cfg: {
 			useImportantStyles: true,
 			//addCacheBuster: false,
@@ -104,7 +104,7 @@
 					clearTimeout(timer);
 				};
 				
-				$(window).bind('load.lP error.lP', removeLoader);
+				$(window).on('load.lP error.lP', removeLoader);
 				
 				addClass.push('loading-polyfills');
 				timer = setTimeout(function(){
@@ -521,7 +521,7 @@
 	$.webshims = webshims;
 	var protocol = (location.protocol == 'https:') ? 'https://' : 'http://';
 	var googleAPIs = protocol + 'ajax.googleapis.com/ajax/libs/';
-	var uiLib = googleAPIs + 'jqueryui/1.8.23/';
+	var uiLib = googleAPIs + 'jqueryui/1.8.24/';
 	var webCFG = webshims.cfg;
 	var webshimsFeatures = webshims.features;
 	var isReady = webshims.isReady;
@@ -1027,7 +1027,7 @@
 			f: 'forms-ext',
 			uiTest: function(){return (modernizrInputTypes.range && modernizrInputTypes.date && modernizrInputTypes.time && modernizrInputTypes.number);},
 			test: function(toLoad){
-				return (this.uiTest() && !webshims.bugs.valueAsNumberSet);
+				return this.uiTest();
 			},
 			d: ['forms', DOMSUPPORT],
 			c: [18, 7, 6]
@@ -1084,56 +1084,72 @@
 	//>
 	
 	//<mediaelement combos: 10, 9, 12, 17, 16, 8, 20, 22, 23, 24, 25, 26, 27
-	needModernizr('audio video texttrackapi');
-	webshims.mediaelement = {};
-	
-	addPolyfill('mediaelement-core', {
-		f: 'mediaelement',
-		noAutoCallback: true,
-		
-		d: ['swfobject', DOMSUPPORT],
-		c: [27, 10, 9, 12, 17, 26, 16, 25, 8, 22, 23, 24, 20]
-	});
-	addPolyfill('mediaelement-swf', {
-		f: 'mediaelement',
-		options: {
-			hasToPlay: 'any',
-			preferFlash: false,
-			jwVars: {},
-			jwParams: {},
-			jwAttrs: {},
-			changeJW: $.noop
-		},
-		methodNames: ['play', 'pause', 'canPlayType', 'mediaLoad:load'],
-		d: ['swfobject', DOMSUPPORT],
-		test: function(){
+	needModernizr('audio video texttrackapi', function(){
+		webshims.mediaelement = {};
+		var swfTest = function(){
 			if(!Modernizr.audio || !Modernizr.video){
+				return false;
+			}
+			if(webshims.mediaelement.loadSwf){
 				return false;
 			}
 			var options = this.options;
 			var hasToPlay = options.hasToPlay;
 			return !( (!window.swfobject || window.swfobject.hasFlashPlayerVersion('9.0.115')) && (options.preferFlash || (hasToPlay != 'any' && !Modernizr.video[hasToPlay] && !Modernizr.audio[hasToPlay])));
-		},
-		c: [27, 10, 9, 22, 20]
-	});
-	
-	bugs.track = (Modernizr.track && (!Modernizr.texttrackapi || typeof (document.createElement('track').track || {}).mode != 'string'));
-	
-	addPolyfill('track', {
-		options: {
-			positionDisplay: true,
-			override: bugs.track
-		},
-		test: function(){
-			return Modernizr.track && !this.options.override && !bugs.track;
-		},
-		d: ['mediaelement', DOMSUPPORT],
-		methodNames: ['addTextTrack'],
-		c: [27, 26, 25]
-	});
-	
-	addModule('track-ui', {
-		d: ['track']
+		};
+		var deps = ['swfobject', DOMSUPPORT];
+		
+		addPolyfill('mediaelement-core', {
+			f: 'mediaelement',
+			noAutoCallback: true,
+			options: {
+				hasToPlay: 'any',
+				preferFlash: false,
+				player: 'jwplayer',
+				vars: {},
+				params: {},
+				attrs: {},
+				changeSWF: $.noop
+			},
+			methodNames: ['play', 'pause', 'canPlayType', 'mediaLoad:load'],
+			d: deps,
+			c: [27, 10, 9, 12, 17, 26, 16, 25, 8, 22, 23, 24, 20]
+		});
+		addPolyfill('mediaelement-swf', {
+			f: 'mediaelement',
+			d: deps,
+			test: function(){
+				return this.options.player != 'jwplayer' ? true : swfTest.apply(this, arguments);
+			},
+			c: [27, 10, 9, 22, 20]
+		});
+		
+		addPolyfill('mediaelement-jaris', {
+			f: 'mediaelement',
+			d: deps,
+			test: function(){
+				return this.options.player == 'jwplayer' ? true : swfTest.apply(this, arguments);
+			}
+		});
+		
+		bugs.track = (Modernizr.track && (!Modernizr.texttrackapi || typeof (document.createElement('track').track || {}).mode != 'string'));
+		
+		addPolyfill('track', {
+			options: {
+				positionDisplay: true,
+				override: bugs.track
+			},
+			test: function(){
+				return Modernizr.track && !this.options.override && !bugs.track;
+			},
+			d: ['mediaelement', DOMSUPPORT],
+			methodNames: ['addTextTrack'],
+			c: [27, 26, 25]
+		});
+		
+		addModule('track-ui', {
+			d: ['track']
+		});
 	});
 	//>
 	

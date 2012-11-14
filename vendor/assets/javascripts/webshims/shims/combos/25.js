@@ -384,50 +384,92 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 			var resizeTimer;
 			var lastHeight;
 			var lastWidth;
-			var handler;
+			
 			var docObserve = {
 				init: false,
+				runs: 0,
+				test: function(){
+					var height = docObserve.getHeight();
+					var width = docObserve.getWidth();
+					if(height != docObserve.height || width != docObserve.width){
+						docObserve.height = height;
+						docObserve.width = width;
+						docObserve.handler({type: 'docresize'});
+						docObserve.runs++;
+						if(docObserve.runs < 30){
+							setTimeout(docObserve.test, 30);
+						}
+					} else {
+						docObserve.runs = 0;
+					}
+				},
+				handler: function(e){
+					clearTimeout(resizeTimer);
+					resizeTimer = setTimeout(function(){
+						if(e.type == 'resize'){
+							var width = $(window).width();
+							var height = $(window).width();
+							if(height == lastHeight && width == lastWidth){
+								return;
+							}
+							lastHeight = height;
+							lastWidth = width;
+							
+							docObserve.height = docObserve.getHeight();
+							docObserve.width = docObserve.getWidth();
+							
+						}
+						$.event.trigger('updateshadowdom');
+					}, (e.type == 'resize') ? 50 : 9);
+				},
+				_create: function(){
+					$.each({ Height: "getHeight", Width: "getWidth" }, function(name, type){
+						var body = document.body;
+						var doc = document.documentElement;
+						docObserve[type] = function(){
+							return Math.max(
+								body[ "scroll" + name ], doc[ "scroll" + name ],
+								body[ "offset" + name ], doc[ "offset" + name ],
+								doc[ "client" + name ]
+							);
+						};
+					});
+				},
 				start: function(){
 					if(!this.init && document.body){
 						this.init = true;
-						this.height = $(document).height();
-						this.width = $(document).width();
-						setInterval(function(){
-							var height = $(document).height();
-							var width = $(document).width();
-							if(height != docObserve.height || width != docObserve.width){
-								docObserve.height = height;
-								docObserve.width = width;
-								handler({type: 'docresize'});
-							}
-						}, 600);
+						this._create();
+						this.height = docObserve.getHeight();
+						this.width = docObserve.getWidth();
+						setInterval(this.test, 400);
+						$(this.test);
+						$(window).bind('load', this.test);
+						$(window).bind('resize', this.handler);
+						(function(){
+							var oldAnimate = $.fn.animate;
+							var animationTimer;
+							
+							$.fn.animate = function(){
+								clearTimeout(animationTimer);
+								animationTimer = setTimeout(function(){
+									docObserve.test();
+									docObserve.handler({type: 'animationstart'});
+								}, 19);
+								
+								return oldAnimate.apply(this, arguments);
+							};
+						})();
 					}
 				}
 			};
 			
-			handler = function(e){
-				clearTimeout(resizeTimer);
-				resizeTimer = setTimeout(function(){
-					if(e.type == 'resize'){
-						var width = $(window).width();
-						var height = $(window).width();
-						if(height == lastHeight && width == lastWidth){
-							return;
-						}
-						lastHeight = height;
-						lastWidth = width;
-						if(document.body){
-							docObserve.height = $(document).height();
-							docObserve.width = $(document).width();
-						}
-					}
-					$.event.trigger('updateshadowdom');
-				}, 40);
-			};
-			$(window).bind('resize', handler);
 			
 			$.event.customEvent.updateshadowdom = true;
-			
+			webshims.docObserve = function(){
+				webshims.ready('DOM', function(){
+					docObserve.start();
+				});
+			};
 			return function(nativeElem, shadowElem, opts){
 				opts = opts || {};
 				if(nativeElem.jquery){
@@ -465,10 +507,8 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 					shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
 				}
 				opts = null;
-				webshims.ready('DOM', function(){
-					docObserve.start();
-				});
-			}
+				webshims.docObserve();
+			};
 		})(),
 		propTypes: {
 			standard: function(descs, name){
@@ -916,11 +956,12 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	var supportsLoop = false;
 	var options = webshims.cfg.mediaelement;
 	var bugs = webshims.bugs;
+	var swfType = options.player == 'jwplayer' ? 'mediaelement-swf' : 'mediaelement-jaris'
 	var loadSwf = function(){
-		webshims.ready('mediaelement-swf', function(){
+		webshims.ready(swfType, function(){
 			if(!webshims.mediaelement.createSWF){
-				webshims.modules["mediaelement-swf"].test = $.noop;
-				webshims.reTest(["mediaelement-swf"], hasNative);
+				webshims.mediaelement.loadSwf = true;
+				webshims.reTest([swfType], hasNative);
 			}
 		});
 	};
@@ -951,7 +992,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 					if(hasSwf){
 						loadSwf();
 					}
-					webshims.ready('WINDOWLOAD mediaelement-swf', function(){
+					webshims.ready('WINDOWLOAD '+swfType, function(){
 						setTimeout(function(){
 							if(hasSwf && !options.preferFlash && webshims.mediaelement.createSWF && !$(e.target).closest('audio, video').is('.nonnative-api-active')){
 								options.preferFlash = true;
@@ -1248,7 +1289,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	var handleThird = (function(){
 		var requested;
 		return function( mediaElem, ret, data ){
-			webshims.ready(hasSwf ? 'mediaelement-swf' : 'mediaelement-yt', function(){
+			webshims.ready(hasSwf ? swfType : 'mediaelement-yt', function(){
 				if(mediaelement.createSWF){
 					mediaelement.createSWF( mediaElem, ret, data );
 				} else if(!requested) {
@@ -1308,7 +1349,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	};
 	
 	
-	$(document).bind('ended', function(e){
+	$(document).on('ended', function(e){
 		var data = webshims.data(e.target, 'mediaelement');
 		if( supportsLoop && (!data || data.isActive == 'html5') && !$.prop(e.target, 'loop')){return;}
 		setTimeout(function(){
@@ -1402,18 +1443,20 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 						};
 						
 						$(this)
-							.bind('play loadstart progress', function(e){
-								if(e.type == 'progress'){
-									lastBuffered = getBufferedString();
+							.on({
+								'play loadstart progress': function(e){
+									if(e.type == 'progress'){
+										lastBuffered = getBufferedString();
+									}
+									clearTimeout(bufferTimer);
+									bufferTimer = setTimeout(testBuffer, 999);
+								},
+								'emptied stalled mediaerror abort suspend': function(e){
+									if(e.type == 'emptied'){
+										lastBuffered = false;
+									}
+									clearTimeout(bufferTimer);
 								}
-								clearTimeout(bufferTimer);
-								bufferTimer = setTimeout(testBuffer, 999);
-							})
-							.bind('emptied stalled mediaerror abort suspend', function(e){
-								if(e.type == 'emptied'){
-									lastBuffered = false;
-								}
-								clearTimeout(bufferTimer);
 							})
 						;
 					}
@@ -1436,7 +1479,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		initMediaElements();
 		webshims.ready('WINDOWLOAD mediaelement', loadThird);
 	} else {
-		webshims.ready('mediaelement-swf', initMediaElements);
+		webshims.ready(swfType, initMediaElements);
 	}
 	$(function(){
 		webshims.loader.loadList(['track-ui']);
@@ -1444,6 +1487,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	
 });
 })(jQuery, Modernizr, jQuery.webshims);jQuery.webshims.register('track', function($, webshims, window, document, undefined){
+	"use strict";
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
 	//descriptions are not really shown, but they are inserted into the dom
@@ -1451,19 +1495,20 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	var notImplemented = function(){
 		webshims.error('not implemented yet');
 	};
+	var dummyTrack = $('<track />');
 	var supportTrackMod = Modernizr.ES5 && Modernizr.objectAccessor;
 	var createEventTarget = function(obj){
 		var eventList = {};
 		obj.addEventListener = function(name, fn){
 			if(eventList[name]){
-				webshims.error('always use $.bind to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
+				webshims.error('always use $.on to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
 			}
 			eventList[name] = fn;
 			
 		};
 		obj.removeEventListener = function(name, fn){
 			if(eventList[name] && eventList[name] != fn){
-				webshims.error('always use $.bind/$.unbind to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
+				webshims.error('always use $.on/$.off to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
 			}
 			if(eventList[name]){
 				delete eventList[name];
@@ -1484,6 +1529,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			}
 			return cue;
 		}
+	};
+	var numericModes = {
+		0: 'disabled',
+		1: 'hidden',
+		2: 'showing'
 	};
 	
 	var textTrackProto = {
@@ -1597,10 +1647,10 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				trackList.push(newTracks[i]);
 			}
 			for(i = 0, len = removed.length; i < len; i++){
-				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: trackList, track: removed[i]}));
+				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: removed[i]}));
 			}
 			for(i = 0, len = added.length; i < len; i++){
-				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: trackList, track: added[i]}));
+				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: added[i]}));
 			}
 			if(baseData.scriptedTextTracks || removed.length){
 				$(this).triggerHandler('updatetrackdisplay');
@@ -1782,8 +1832,8 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		obj.cues = null;
 		$(mediaelem).unbind(loadEvents, load);
 		$(track).unbind('checktrackmode', load);
-		$(mediaelem).bind(loadEvents, load);
-		$(track).bind('checktrackmode', load);
+		$(mediaelem).on(loadEvents, load);
+		$(track).on('checktrackmode', load);
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
 			load();
@@ -2160,7 +2210,7 @@ modified for webshims
 		addTextTrack: {
 			value: function(kind, label, lang){
 				var textTrack = mediaelement.createTextTrack(this, {
-					kind: kind || '',
+					kind: dummyTrack.prop('kind', kind || '').prop('kind'),
 					label: label || '',
 					srclang: lang || ''
 				});
@@ -2176,7 +2226,7 @@ modified for webshims
 	}, 'prop');
 
 	
-	$(document).bind('emptied ended updatetracklist', function(e){
+	$(document).on('emptied ended updatetracklist', function(e){
 		if($(e.target).is('audio, video')){
 			var baseData = webshims.data(e.target, 'mediaelementBase');
 			if(baseData){
@@ -2217,7 +2267,7 @@ modified for webshims
 								kind = $.prop(this, 'kind');
 								readyState = getNativeReadyState(this, origTrack);
 								if (origTrack.mode || readyState) {
-									shimedTrack.mode = origTrack.mode;
+									shimedTrack.mode = numericModes[origTrack.mode] || origTrack.mode;
 								}
 								//disable track from showing + remove UI
 								if(kind != 'descriptions'){
@@ -2228,7 +2278,7 @@ modified for webshims
 								
 							}
 						})
-						.bind('load error', function(e){
+						.on('load error', function(e){
 							if(e.originalEvent){
 								e.stopImmediatePropagation();
 							}
@@ -2252,5 +2302,4 @@ modified for webshims
 	if(Modernizr.track){
 		$('video, audio').trigger('trackapichange');
 	}
-	
 });

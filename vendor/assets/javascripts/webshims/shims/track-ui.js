@@ -1,4 +1,5 @@
 jQuery.webshims.register('track-ui', function($, webshims, window, document, undefined){
+	"use strict";
 	var options = webshims.cfg.track;
 	var enterE = {type: 'enter'};
 	var exitE = {type: 'exit'};
@@ -19,6 +20,7 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 					if(!baseData.trackDisplay){
 						baseData.trackDisplay = $('<div class="cue-display"><span class="description-cues" aria-live="assertive" /></div>').insertAfter(media);
 						this.addEvents(baseData, media);
+						webshims.docObserve();
 					}
 					
 					if(baseData.hasDirtyTrackDisplay){
@@ -32,13 +34,13 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 			var element = $('<span class="cue-wrapper" />');
 			$.each(baseData.displayedActiveCues, function(i, cue){
 				var id = (cue.id) ? 'id="cue-id-'+cue.id +'"' : '';
-				var cueHTML = $('<span '+ id+ ' class="cue" />').html(cue.getCueAsHTML());
+				var cueHTML = $('<span class="cue-line"><span '+ id+ ' class="cue" /></span>').find('span').html(cue.getCueAsHTML()).end();
 				if(cue.track.kind == 'descriptions'){
 					setTimeout(function(){
 						$('span.description-cues', baseData.trackDisplay).html(cueHTML);
 					}, 0);
 				} else {
-					element.append(cueHTML);
+					element.prepend(cueHTML);
 				}
 			});
 			$('span.cue-wrapper', baseData.trackDisplay).remove();
@@ -77,8 +79,8 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 				var forceUpdate = function(){
 					positionDisplay(true);
 				};
-				media.bind('updateshadowdom playerdimensionchange mediaelementapichange updatetrackdisplay updatemediaelementdimensions swfstageresize', delayed);
-				media.bind('forceupdatetrackdisplay', forceUpdate);
+				media.on('updateshadowdom playerdimensionchange mediaelementapichange updatetrackdisplay updatemediaelementdimensions swfstageresize', delayed);
+				media.on('forceupdatetrackdisplay', forceUpdate);
 				forceUpdate();
 			}
 		},
@@ -249,7 +251,6 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 						track = trackList[i];
 						if(track.mode != 'disabled' && track.cues && track.cues.length){
 							mediaelement.getActiveCue(track, elem, time, baseData);
-							
 						}
 					}
 					
@@ -269,8 +270,8 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 				var addTrackView = function(){
 					
 					elem
-						.unbind('.trackview')
-						.bind('play.trackview timeupdate.trackview updatetrackdisplay.trackview', onUpdate)
+						.off('.trackview')
+						.on('play.trackview timeupdate.trackview updatetrackdisplay.trackview', onUpdate)
 					;
 				};
 				var baseData, trackList, updateTimer;
@@ -278,7 +279,7 @@ jQuery.webshims.register('track-ui', function($, webshims, window, document, und
 				if(!usesNativeTrack()){
 					addTrackView();
 				} else {
-					elem.bind('mediaelementapichange trackapichange', function(){
+					elem.on('mediaelementapichange trackapichange', function(){
 						if(!usesNativeTrack() || elem.is('.nonnative-api-active')){
 							addTrackView();
 						} else {

@@ -1,4 +1,5 @@
 jQuery.webshims.register('track', function($, webshims, window, document, undefined){
+	"use strict";
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
 	//descriptions are not really shown, but they are inserted into the dom
@@ -6,19 +7,20 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 	var notImplemented = function(){
 		webshims.error('not implemented yet');
 	};
+	var dummyTrack = $('<track />');
 	var supportTrackMod = Modernizr.ES5 && Modernizr.objectAccessor;
 	var createEventTarget = function(obj){
 		var eventList = {};
 		obj.addEventListener = function(name, fn){
 			if(eventList[name]){
-				webshims.error('always use $.bind to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
+				webshims.error('always use $.on to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
 			}
 			eventList[name] = fn;
 			
 		};
 		obj.removeEventListener = function(name, fn){
 			if(eventList[name] && eventList[name] != fn){
-				webshims.error('always use $.bind/$.unbind to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
+				webshims.error('always use $.on/$.off to the shimed event: '+ name +' already bound fn was: '+ eventList[name] +' your fn was: '+ fn);
 			}
 			if(eventList[name]){
 				delete eventList[name];
@@ -39,6 +41,11 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 			}
 			return cue;
 		}
+	};
+	var numericModes = {
+		0: 'disabled',
+		1: 'hidden',
+		2: 'showing'
 	};
 	
 	var textTrackProto = {
@@ -152,10 +159,10 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 				trackList.push(newTracks[i]);
 			}
 			for(i = 0, len = removed.length; i < len; i++){
-				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: trackList, track: removed[i]}));
+				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: removed[i]}));
 			}
 			for(i = 0, len = added.length; i < len; i++){
-				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: trackList, track: added[i]}));
+				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: added[i]}));
 			}
 			if(baseData.scriptedTextTracks || removed.length){
 				$(this).triggerHandler('updatetrackdisplay');
@@ -337,8 +344,8 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 		obj.cues = null;
 		$(mediaelem).unbind(loadEvents, load);
 		$(track).unbind('checktrackmode', load);
-		$(mediaelem).bind(loadEvents, load);
-		$(track).bind('checktrackmode', load);
+		$(mediaelem).on(loadEvents, load);
+		$(track).on('checktrackmode', load);
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
 			load();
@@ -715,7 +722,7 @@ modified for webshims
 		addTextTrack: {
 			value: function(kind, label, lang){
 				var textTrack = mediaelement.createTextTrack(this, {
-					kind: kind || '',
+					kind: dummyTrack.prop('kind', kind || '').prop('kind'),
 					label: label || '',
 					srclang: lang || ''
 				});
@@ -731,7 +738,7 @@ modified for webshims
 	}, 'prop');
 
 	
-	$(document).bind('emptied ended updatetracklist', function(e){
+	$(document).on('emptied ended updatetracklist', function(e){
 		if($(e.target).is('audio, video')){
 			var baseData = webshims.data(e.target, 'mediaelementBase');
 			if(baseData){
@@ -772,7 +779,7 @@ modified for webshims
 								kind = $.prop(this, 'kind');
 								readyState = getNativeReadyState(this, origTrack);
 								if (origTrack.mode || readyState) {
-									shimedTrack.mode = origTrack.mode;
+									shimedTrack.mode = numericModes[origTrack.mode] || origTrack.mode;
 								}
 								//disable track from showing + remove UI
 								if(kind != 'descriptions'){
@@ -783,7 +790,7 @@ modified for webshims
 								
 							}
 						})
-						.bind('load error', function(e){
+						.on('load error', function(e){
 							if(e.originalEvent){
 								e.stopImmediatePropagation();
 							}
@@ -807,5 +814,4 @@ modified for webshims
 	if(Modernizr.track){
 		$('video, audio').trigger('trackapichange');
 	}
-	
 });
