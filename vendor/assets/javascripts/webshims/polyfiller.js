@@ -36,7 +36,7 @@
 
 	
 	var webshims = {
-		version: '1.9.3',
+		version: '1.9.4',
 		cfg: {
 			useImportantStyles: true,
 			//addCacheBuster: false,
@@ -291,7 +291,7 @@
 		register: function(name, fn){
 			var module = modules[name];
 			if (!module) {
-				webshims.warn("can't find module: " + name);
+				webshims.error("can't find module: " + name);
 				return;
 			}
 			if (module.noAutoCallback) {
@@ -847,7 +847,7 @@
 	});
 		
 	
-	//<localstorage combos: 14
+	//<localstorage
 	needModernizr('localstorage');
 	addPolyfill('json-storage', {
 		test: Modernizr.localstorage && 'sessionStorage' in window && 'JSON' in window,
@@ -860,7 +860,7 @@
 	//>localstorage
 	
 	
-	//<geolocation combos: 14,15
+	//<geolocation
 	needModernizr('geolocation');
 	addPolyfill('geolocation', {
 		test: Modernizr.geolocation,
@@ -930,13 +930,16 @@
 	//>
 	
 	
-	//<forms combos: 3, 2, 59, 17, 16, 5, 4, 24, 19, 18, 7, 59, 5, 21, 11, 23, 26
+	//<forms
 	needModernizr('input inputtypes', function(){
 		var modernizrInputAttrs = Modernizr.input;
 		var modernizrInputTypes = Modernizr.inputtypes;
 		var formvalidation = 'formvalidation';
-		var formOptions;
 		var select = $('<select required="" name="a"><option disabled="" /></select>')[0];
+		var bustedValidity = false;
+		var formExtend, formOptions;
+		
+		
 		addTest(formvalidation, function(){
 			return !!(modernizrInputAttrs.required && modernizrInputAttrs.pattern);
 		});
@@ -946,8 +949,10 @@
 		});
 		
 		if(Modernizr[formvalidation]){
-			bugs.bustedValidity = Modernizr.formattribute === false || !Modernizr.fieldsetdisabled || !('value' in document.createElement('output')) || !($('<input type="date" value="1488-12-11" />')[0].validity || {valid: true}).valid || !('required' in select) || (select.validity || {}).valid;
+			bugs.bustedValidity = bustedValidity = Modernizr.formattribute === false || !Modernizr.fieldsetdisabled || !('value' in document.createElement('output')) || !($('<input type="date" value="1488-12-11" />')[0].validity || {valid: true}).valid || !('required' in select) || (select.validity || {}).valid;
 		}
+		
+		formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : 'form-extend';
 		
 		addTest('styleableinputrange', function(){
 			if(!modernizrInputTypes.range){
@@ -988,36 +993,28 @@
 		
 		formOptions = webCFG.forms;
 				
-		if(Modernizr[formvalidation] && !bugs.bustedValidity){
-			addPolyfill('form-extend', {
-				f: 'forms',
-				src: 'form-native-extend',
-				test: function(toLoad){
-					return ((modules['form-number-date-api'].test() || $.inArray('form-number-date-api', toLoad  || []) == -1) && !formOptions.overrideMessages );
-				},
-				d: ['form-core', DOMSUPPORT, 'form-message'],
-				c: [18, 7, 59, 5]
-			});
-			removeCombos = removeCombos.concat([2, 3, 23, 21]);
-				
-		} else {
-			removeCombos = removeCombos.concat([18, 7, 4, 59, 5]);
-			
-			addPolyfill('form-extend', {
-				f: 'forms',
-				src: 'form-shim-extend',
-				test: function(){
-					return false;
-				},
-				d: ['form-core', DOMSUPPORT],
-				c: [3, 2, 23, 21]
-			});
-		}
+		addPolyfill('form-native-extend', {
+			f: 'forms',
+			test: function(toLoad){
+				return (!Modernizr[formvalidation] || bustedValidity) || ((modules['form-number-date-api'].test() || $.inArray('form-number-date-api', toLoad  || []) == -1) && !formOptions.overrideMessages );
+			},
+			d: ['form-core', DOMSUPPORT, 'form-message'],
+			c: [18, 7, 59, 5]
+		});
+		
+		addPolyfill('form-shim-extend', {
+			f: 'forms',
+			test: function(){
+				return Modernizr[formvalidation] && !bustedValidity;
+			},
+			d: ['form-core', DOMSUPPORT],
+			c: [3, 2, 23, 21]
+		});
 		
 		addPolyfill('form-message', {
 			f: 'forms',
 			test: function(toLoad){
-				return !( formOptions.customMessages || !Modernizr[formvalidation] || !modules['form-extend'].test(toLoad) || bugs.validationMessage || bugs.bustedValidity );
+				return !( formOptions.customMessages || !Modernizr[formvalidation] || bugs.validationMessage || bustedValidity || !modules[formExtend].test(toLoad) );
 			},
 			d: [DOMSUPPORT],
 			c: [3, 2, 23, 21, 59, 17, 5, 4]
@@ -1066,7 +1063,7 @@
 	});
 	//>
 	
-	//<details combos: 12,13,15
+	//<details
 	if(!('details' in Modernizr)){
 		addTest('details', function(){
 			return ('open' in document.createElement('details'));
@@ -1083,7 +1080,7 @@
 	});
 	//>
 	
-	//<mediaelement combos: 10, 9, 12, 17, 16, 8, 20, 22, 23, 24, 25, 26, 27
+	//<mediaelement
 	needModernizr('audio video texttrackapi', function(){
 		webshims.mediaelement = {};
 		var swfTest = function(){

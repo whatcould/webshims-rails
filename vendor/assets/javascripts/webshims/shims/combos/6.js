@@ -381,7 +381,8 @@ jQuery.webshims.register('form-number-date-api', function($, webshims, window, d
 //		webshims.addInputType('datetime-local', typeProtos['datetime-local']);
 //	}
 		
-});/* number-date-ui */
+});
+/* number-date-ui */
 /* https://github.com/aFarkas/webshim/issues#issue/23 */
 jQuery.webshims.register('form-number-date-ui', function($, webshims, window, document, undefined, options){
 	"use strict";
@@ -424,11 +425,11 @@ jQuery.webshims.register('form-number-date-ui', function($, webshims, window, do
 				button.css('marginRight',  Math.floor(Math.abs(controlDim.w + controlDim.mL - 0.1) + inputDim.mR));
 				input.css('paddingRight', (parseInt(input.css('paddingRight'), 10) || 0) + Math.abs(controlDim.mL));
 				if(inputDim.add){
-					input.css('width', Math.floor(inputDim.w + controlDim.mL));
+					input.css('width', Math.floor(inputDim.w + controlDim.mL - (boxSizing ? 0.1 : 0.6)));
 				}
 			} else {
 				button.css('marginRight', inputDim.mR);
-				input.css('width',  Math.floor(inputDim.w - controlDim.mL - controlDim.w - 0.2));
+				input.css('width',  Math.floor(inputDim.w - controlDim.mL - controlDim.w - (boxSizing ? 0.2 : 0.6)));
 			}
 		};
 	})();

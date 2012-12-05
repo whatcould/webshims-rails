@@ -1,5 +1,5 @@
 if(!Modernizr.formvalidation || jQuery.webshims.bugs.bustedValidity){
-jQuery.webshims.register('form-extend', function($, webshims, window, document){
+jQuery.webshims.register('form-shim-extend', function($, webshims, window, document){
 "use strict";
 webshims.inputTypes = webshims.inputTypes || {};
 //some helper-functions
@@ -815,9 +815,7 @@ if($.browser.webkit && Modernizr.inputtypes.date){
 			});
 			
 			$(document).on('change', function(e){
-				isChangeSubmit = true;
 				correctValue(e.target);
-				isChangeSubmit = false;
 			});
 			
 		})();
@@ -1240,7 +1238,8 @@ try {
 					url: 1,
 					email: 1,
 					password: 1,
-					tel: 1
+					tel: 1,
+					number: 1
 				}
 			;
 			

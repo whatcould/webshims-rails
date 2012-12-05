@@ -800,6 +800,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 })(jQuery, jQuery.webshims);
 
 
+
 //DOM-Extension helper
 jQuery.webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
@@ -1160,28 +1161,25 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 		//http://www.w3.org/TR/html5/common-dom-interfaces.html#reflect
 		createPropDefault: createPropDefault,
 		data: elementData,
-		moveToFirstEvent: (function(){
-			var getData = $._data ? '_data' : 'data';
-			return function(elem, eventType, bindType){
-				var events = ($[getData](elem, 'events') || {})[eventType];
-				var fn;
-				
-				if(events && events.length > 1){
-					fn = events.pop();
-					if(!bindType){
-						bindType = 'bind';
-					}
-					if(bindType == 'bind' && events.delegateCount){
-						events.splice( events.delegateCount, 0, fn);
-					} else {
-						events.unshift( fn );
-					}
-					
-					
+		moveToFirstEvent: function(elem, eventType, bindType){
+			var events = ($._data(elem, 'events') || {})[eventType];
+			var fn;
+			
+			if(events && events.length > 1){
+				fn = events.pop();
+				if(!bindType){
+					bindType = 'bind';
 				}
-				elem = null;
-			};
-		})(),
+				if(bindType == 'bind' && events.delegateCount){
+					events.splice( events.delegateCount, 0, fn);
+				} else {
+					events.unshift( fn );
+				}
+				
+				
+			}
+			elem = null;
+		},
 		addShadowDom: (function(){
 			var resizeTimer;
 			var lastHeight;
@@ -1193,13 +1191,14 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 				test: function(){
 					var height = docObserve.getHeight();
 					var width = docObserve.getWidth();
+					
 					if(height != docObserve.height || width != docObserve.width){
 						docObserve.height = height;
 						docObserve.width = width;
 						docObserve.handler({type: 'docresize'});
 						docObserve.runs++;
-						if(docObserve.runs < 30){
-							setTimeout(docObserve.test, 30);
+						if(docObserve.runs < 9){
+							setTimeout(docObserve.test, 90);
 						}
 					} else {
 						docObserve.runs = 0;
@@ -1243,9 +1242,9 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 						this._create();
 						this.height = docObserve.getHeight();
 						this.width = docObserve.getWidth();
-						setInterval(this.test, 400);
+						setInterval(this.test, 600);
 						$(this.test);
-						$(window).bind('load', this.test);
+						webshims.ready('WINDOWLOAD', this.test);
 						$(window).bind('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -1255,8 +1254,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 								clearTimeout(animationTimer);
 								animationTimer = setTimeout(function(){
 									docObserve.test();
-									docObserve.handler({type: 'animationstart'});
-								}, 19);
+								}, 99);
 								
 								return oldAnimate.apply(this, arguments);
 							};
