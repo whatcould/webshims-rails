@@ -98,7 +98,7 @@
 		(function(){
 			var elems = /^(?:textarea|input)$/i;
 			var form = false;
-
+			
 			document.addEventListener('contextmenu', function(e){
 				if(elems.test( e.target.nodeName || '') && (form = e.target.form)){
 					setTimeout(function(){
@@ -113,6 +113,7 @@
 					e.stopImmediatePropagation();
 				}
 			});
+			
 		})();
 	}
 })(jQuery);
@@ -120,10 +121,11 @@
 jQuery.webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
 	
-	var groupTypes = {radio: 1};
+	
 	var checkTypes = {checkbox: 1, radio: 1};
 	var emptyJ = $([]);
 	var bugs = webshims.bugs;
+	var groupTypes = {radio: 1};
 	var getGroupElements = function(elem){
 		elem = $(elem);
 		var name;
@@ -229,6 +231,26 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 		return false;
 	};
 	
+	if(Modernizr.formvalidation && $.browser.webkit && !webshims.bugs.bustedValidity && webshims.browserVersion < 27){
+		(function(){
+			var retriggerRadioValidity = function(){
+				var validity;
+				if((validity = this.validity) && !validity.customError){
+					this.setCustomValidity('');
+				}
+			};
+			
+			webshims.addReady(function(context, insertedElement){
+				if(context !== document){
+					$('input[type="radio"]:invalid', context)
+						.add(insertedElement.filter('input[type="radio"]:invalid'))
+						.each(retriggerRadioValidity)
+					;
+				}
+			});
+		})();
+	}
+	
 	var customEvents = $.event.customEvent || {};
 	var isValid = function(elem){
 		return ($.prop(elem, 'validity') || {valid: 1}).valid;
@@ -303,7 +325,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 		} catch(e){}
 		return ret;
 	};
-	/* form-ui-invalid/form-ui-valid are deprecated. use user-error/user-succes instead */
+	/* form-ui-invalid/form-ui-valid are deprecated. use user-error/user-success instead */
 	var invalidClass = 'user-error';
 	var invalidClasses = 'user-error form-ui-invalid';
 	var validClass = 'user-success';
@@ -429,6 +451,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 				if(noBubble){
 					this.hide();
 				} else {
+					
 					this.getMessage(elem, message);
 					this.position(visual, offset);
 					
@@ -437,7 +460,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 						hideTimer = setTimeout(boundHide, this.hideDelay);
 					}
 					$(window)
-						.on('resize.validityalert', function(){
+						.on('resize.validityalert reposoverlay.validityalert', function(){
 							clearTimeout(resizeTimer);
 							resizeTimer = setTimeout(function(){
 								api.position(visual);
@@ -485,10 +508,11 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 				setTimeout(function(){
 					$(document).on('focusout.validityalert', boundHide);
 				}, 10);
+				$(window).triggerHandler('reposoverlay');
 			},
 			getMessage: function(elem, message){
 				if (!message) {
-					message = getContentValidationMessage(elem[0]) || elem.prop('validationMessage');
+					message = getContentValidationMessage(elem[0]) || elem.prop('customValidationMessage') || elem.prop('validationMessage');
 				}
 				if (message) {
 					$('span.va-box', errorBubble).text(message);
@@ -598,7 +622,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 			$(document).on('firstinvalid', function(e){
 				if(!e.isInvalidUIPrevented()){
 					e.preventDefault();
-					$.webshims.validityAlert.showFor( e.target, $(e.target).prop('customValidationMessage') ); 
+					$.webshims.validityAlert.showFor( e.target ); 
 				}
 			});
 		});
@@ -2208,14 +2232,20 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	
 	
 	['select', 'radio'].forEach(function(type){
-		validityMessages['en'].valueMissing[type] = 'Please select an option.';
+		if(typeof validityMessages['en'].valueMissing == 'object'){
+			validityMessages['en'].valueMissing[type] = 'Please select an option.';
+		}
 	});
 	
 	['date', 'time', 'datetime-local'].forEach(function(type){
-		validityMessages.en.rangeUnderflow[type] = 'Value must be at or after {%min}.';
+		if(typeof validityMessages['en'].rangeUnderflow == 'object'){
+			validityMessages.en.rangeUnderflow[type] = 'Value must be at or after {%min}.';
+		}
 	});
 	['date', 'time', 'datetime-local'].forEach(function(type){
-		validityMessages.en.rangeOverflow[type] = 'Value must be at or before {%max}.';
+		if(typeof validityMessages['en'].rangeOverflow == 'object'){
+			validityMessages.en.rangeOverflow[type] = 'Value must be at or before {%max}.';
+		}
 	});
 	
 	validityMessages['en-US'] = validityMessages['en-US'] || validityMessages['en'];
@@ -2247,14 +2277,20 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	}, (validityMessages['de'] || {}));
 	
 	['select', 'radio'].forEach(function(type){
-		validityMessages['de'].valueMissing[type] = 'Bitte wählen Sie eine Option aus';
+		if(typeof validityMessages['de'].valueMissing == 'object'){
+			validityMessages['de'].valueMissing[type] = 'Bitte wählen Sie eine Option aus';
+		}
 	});
 	
 	['date', 'time', 'datetime-local'].forEach(function(type){
-		validityMessages.de.rangeUnderflow[type] = '{%value} ist zu früh. {%min} ist die früheste Zeit, die Sie benutzen können.';
+		if(typeof validityMessages['de'].rangeUnderflow == 'object'){
+			validityMessages.de.rangeUnderflow[type] = '{%value} ist zu früh. {%min} ist die früheste Zeit, die Sie benutzen können.';
+		}
 	});
 	['date', 'time', 'datetime-local'].forEach(function(type){
-		validityMessages.de.rangeOverflow[type] = '{%value} ist zu spät. {%max} ist die späteste Zeit, die Sie benutzen können.';
+		if(typeof validityMessages['de'].rangeOverflow == 'object'){
+			validityMessages.de.rangeOverflow[type] = '{%value} ist zu spät. {%max} ist die späteste Zeit, die Sie benutzen können.';
+		}
 	});
 	
 	var currentValidationMessage =  validityMessages[''];

@@ -36,7 +36,7 @@
 
 	
 	var webshims = {
-		version: '1.9.4',
+		version: '1.9.5',
 		cfg: {
 			useImportantStyles: true,
 			//addCacheBuster: false,
@@ -847,7 +847,7 @@
 	});
 		
 	
-	//<localstorage
+	//<json-storage
 	needModernizr('localstorage');
 	addPolyfill('json-storage', {
 		test: Modernizr.localstorage && 'sessionStorage' in window && 'JSON' in window,
@@ -857,7 +857,7 @@
 		noAutoCallback: true,
 		c: [14]
 	});
-	//>localstorage
+	//>json-storage
 	
 	
 	//<geolocation
@@ -952,7 +952,7 @@
 			bugs.bustedValidity = bustedValidity = Modernizr.formattribute === false || !Modernizr.fieldsetdisabled || !('value' in document.createElement('output')) || !($('<input type="date" value="1488-12-11" />')[0].validity || {valid: true}).valid || !('required' in select) || (select.validity || {}).valid;
 		}
 		
-		formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : 'form-extend';
+		formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : 'form-shim-extend';
 		
 		addTest('styleableinputrange', function(){
 			if(!modernizrInputTypes.range){
