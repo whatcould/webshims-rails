@@ -50,7 +50,9 @@
 							if(hasSwf && !options.preferFlash && webshims.mediaelement.createSWF && !$(e.target).closest('audio, video').is('.nonnative-api-active')){
 								options.preferFlash = true;
 								document.removeEventListener('error', switchOptions, true);
-								$('audio, video').mediaLoad();
+								$('audio, video').each(function(){
+									webshims.mediaelement.selectSource(this);
+								});
 								webshims.info("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src);
 							} else if(!hasSwf){
 								document.removeEventListener('error', switchOptions, true);
@@ -454,7 +456,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		data = data || webshims.data(elem, 'mediaelement');
 		stepSources(elem, data, options.preferFlash || undefined, _srces);
 	};
-	
+	mediaelement.selectSource = selectSource;
 	
 	$(document).on('ended', function(e){
 		var data = webshims.data(e.target, 'mediaelement');
@@ -520,52 +522,57 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			var media = $('video, audio', context)
 				.add(insertedElement.filter('video, audio'))
 				.each(function(){
-					if($.browser.msie && webshims.browserVersion > 8 && $.prop(this, 'paused') && !$.prop(this, 'readyState') && $(this).is('audio[preload="none"][controls]:not([autoplay])')){
+					var data = webshims.data(this, 'mediaelement');
+					
+					if(hasNative && $.prop(this, 'paused') && !$.prop(this, 'readyState') && $(this).is('audio[preload="none"][controls]:not([autoplay])') && (!data || data.isActive == 'html5')){
+						//IE controls not visible bug
 						$(this).prop('preload', 'metadata').mediaLoad();
 					} else {
-						selectSource(this);
+						selectSource(this, data);
 					}
 					
-					
-					
 					if(hasNative){
-						var bufferTimer;
-						var lastBuffered;
-						var elem = this;
-						var getBufferedString = function(){
-							var buffered = $.prop(elem, 'buffered');
-							if(!buffered){return;}
-							var bufferString = "";
-							for(var i = 0, len = buffered.length; i < len;i++){
-								bufferString += buffered.end(i);
-							}
-							return bufferString;
-						};
-						var testBuffer = function(){
-							var buffered = getBufferedString();
-							if(buffered != lastBuffered){
-								lastBuffered = buffered;
-								$(elem).triggerHandler('progress');
-							}
-						};
 						
-						$(this)
-							.on({
-								'play loadstart progress': function(e){
-									if(e.type == 'progress'){
-										lastBuffered = getBufferedString();
-									}
-									clearTimeout(bufferTimer);
-									bufferTimer = setTimeout(testBuffer, 999);
-								},
-								'emptied stalled mediaerror abort suspend': function(e){
-									if(e.type == 'emptied'){
-										lastBuffered = false;
-									}
-									clearTimeout(bufferTimer);
+						//FF progress bug
+						(function(){
+							var bufferTimer;
+							var lastBuffered;
+							var elem = this;
+							var getBufferedString = function(){
+								var buffered = $.prop(elem, 'buffered');
+								if(!buffered){return;}
+								var bufferString = "";
+								for(var i = 0, len = buffered.length; i < len;i++){
+									bufferString += buffered.end(i);
 								}
-							})
-						;
+								return bufferString;
+							};
+							var testBuffer = function(){
+								var buffered = getBufferedString();
+								if(buffered != lastBuffered){
+									lastBuffered = buffered;
+									$(elem).triggerHandler('progress');
+								}
+							};
+							
+							$(this)
+								.on({
+									'play loadstart progress': function(e){
+										if(e.type == 'progress'){
+											lastBuffered = getBufferedString();
+										}
+										clearTimeout(bufferTimer);
+										bufferTimer = setTimeout(testBuffer, 999);
+									},
+									'emptied stalled mediaerror abort suspend': function(e){
+										if(e.type == 'emptied'){
+											lastBuffered = false;
+										}
+										clearTimeout(bufferTimer);
+									}
+								})
+							;
+						})();
 					}
 					
 				})
@@ -1052,18 +1059,28 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
-		
+		var opposite = {
+			'html5': 'third',
+			'third': 'html5'
+		};
 		var hidePlayerEvents = function(event){
 			var data = webshims.data(event.target, 'mediaelement');
 			if(!data){return;}
 			var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 			if( isNativeHTML5 == (data.activating == 'third') ){
 				event.stopImmediatePropagation();
-				if(stopEvents[event.type] && data.isActive != data.activating){
-					$(event.target).pause();
+				if(stopEvents[event.type]){
+					if(data.isActive != data.activating){
+						$(event.target).pause();
+					} else {
+						data.isActive = opposite[data.isActive];
+						$(event.target).pause();
+						data.isActive = opposite[data.isActive];
+					}
 				}
 			}
 		};
+		
 		
 		addMediaToStopEvents = function(elem){
 			$(elem)
@@ -1196,6 +1213,10 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 				overflow: 'hidden'
 			})
 		;
+		var setDimensions = function(){
+			setElementDimension(data, $.prop(elem, 'controls'));
+		};
+			
 		data = webshims.data(elem, 'mediaelement', webshims.objectCreate(playerStateObj, {
 			actionQueue: {
 				value: []
@@ -1268,9 +1289,9 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		
-		$(elem).on('updatemediaelementdimensions updateshadowdom', function(){
-			setElementDimension(data, $.prop(elem, 'controls'));
-		});
+		
+		$(document).on('updateshadowdom', setDimensions);
+		$(elem).on('updatemediaelementdimensions', setDimensions);
 		
 		
 		swfobject.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.0", false, vars, params, attrs, function(swfData){
@@ -1473,9 +1494,8 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
 	});
 	
-	if(hasFlash){
+	if(hasFlash && $.cleanData){
 		var oldClean = $.cleanData;
-		var gcBrowser = $.browser.msie && webshims.browserVersion < 9;
 		var flashNames = {
 			object: 1,
 			OBJECT: 1
@@ -1492,15 +1512,13 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 								elems[i][SENDEVENT]('play', false);
 							} catch(er){}
 						}
-						if(gcBrowser){
-							try {
-								for (prop in elems[i]) {
-									if (typeof elems[i][prop] == "function") {
-										elems[i][prop] = null;
-									}
+						try {
+							for (prop in elems[i]) {
+								if (typeof elems[i][prop] == "function") {
+									elems[i][prop] = null;
 								}
-							} catch(er){}
-						}
+							}
+						} catch(er){}
 					}
 				}
 				

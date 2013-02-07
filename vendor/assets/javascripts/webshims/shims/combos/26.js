@@ -16,6 +16,11 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	var singleVal = function(elem, name, val, pass, _argless){
 		return (_argless) ? oldVal.call($(elem)) : oldVal.call($(elem), val);
 	};
+	
+	$.fn.onTrigger = function(evt, fn){
+		return this.on(evt, fn).each(fn);
+	};
+	
 	$.fn.val = function(val){
 		var elem = this[0];
 		if(arguments.length && val == null){
@@ -210,14 +215,14 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	});
 	
 	//see also: https://github.com/lojjic/PIE/issues/40 | https://prototype.lighthouseapp.com/projects/8886/tickets/1107-ie8-fatal-crash-when-prototypejs-is-loaded-with-rounded-cornershtc
-	var isExtendNativeSave = (!$.browser.msie || parseInt($.browser.version, 10) > 8);
+	var isExtendNativeSave = Modernizr.ES5;
 	var extendNativeValue = (function(){
 		var UNKNOWN = webshims.getPrototypeOf(document.createElement('foobar'));
 		var has = Object.prototype.hasOwnProperty;
 		return function(nodeName, prop, desc){
-			var elem = document.createElement(nodeName);
-			var elemProto = webshims.getPrototypeOf(elem);
-			if( isExtendNativeSave && elemProto && UNKNOWN !== elemProto && ( !elem[prop] || !has.call(elem, prop) ) ){
+			var elem;
+			var elemProto;
+			if( isExtendNativeSave && (elem = document.createElement(nodeName)) && (elemProto = webshims.getPrototypeOf(elem)) && UNKNOWN !== elemProto && ( !elem[prop] || !has.call(elem, prop) ) ){
 				var sup = elem[prop];
 				desc._supvalue = function(){
 					if(sup && sup.apply){
@@ -417,7 +422,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 							docObserve.width = docObserve.getWidth();
 							
 						}
-						$.event.trigger('updateshadowdom');
+						$(document).triggerHandler('updateshadowdom');
 					}, (e.type == 'resize') ? 50 : 9);
 				},
 				_create: function(){
@@ -461,7 +466,6 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 			};
 			
 			
-			$.event.customEvent.updateshadowdom = true;
 			webshims.docObserve = function(){
 				webshims.ready('DOM', function(){
 					docObserve.start();
@@ -905,52 +909,53 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 });
 //html5a11y
 (function($, document){
-	var browserVersion = $.webshims.browserVersion;
-	if($.browser.mozilla && browserVersion > 5){return;}
-	if (!$.browser.msie || (browserVersion < 12 && browserVersion > 7)) {
-		var elemMappings = {
-			article: "article",
-			aside: "complementary",
-			section: "region",
-			nav: "navigation",
-			address: "contentinfo"
-		};
-		var addRole = function(elem, role){
-			var hasRole = elem.getAttribute('role');
-			if (!hasRole) {
-				elem.setAttribute('role', role);
-			}
-		};
-		
-		$.webshims.addReady(function(context, contextElem){
-			$.each(elemMappings, function(name, role){
-				var elems = $(name, context).add(contextElem.filter(name));
-				for (var i = 0, len = elems.length; i < len; i++) {
-					addRole(elems[i], role);
-				}
-			});
-			if (context === document) {
-				var header = document.getElementsByTagName('header')[0];
-				var footers = document.getElementsByTagName('footer');
-				var footerLen = footers.length;
-				if (header && !$(header).closest('section, article')[0]) {
-					addRole(header, 'banner');
-				}
-				if (!footerLen) {
-					return;
-				}
-				var footer = footers[footerLen - 1];
-				if (!$(footer).closest('section, article')[0]) {
-					addRole(footer, 'contentinfo');
-				}
+	//if we support basic styleing or do not support ARIA (assumed) abort
+	if(!Modernizr.localstorage || ('hidden' in document.createElement('a'))){return;}
+	
+	var elemMappings = {
+		article: "article",
+		aside: "complementary",
+		section: "region",
+		nav: "navigation",
+		address: "contentinfo"
+	};
+	var addRole = function(elem, role){
+		var hasRole = elem.getAttribute('role');
+		if (!hasRole) {
+			elem.setAttribute('role', role);
+		}
+	};
+	
+	$.webshims.addReady(function(context, contextElem){
+		$.each(elemMappings, function(name, role){
+			var elems = $(name, context).add(contextElem.filter(name));
+			for (var i = 0, len = elems.length; i < len; i++) {
+				addRole(elems[i], role);
 			}
 		});
-	}
+		if (context === document) {
+			var header = document.getElementsByTagName('header')[0];
+			var footers = document.getElementsByTagName('footer');
+			var footerLen = footers.length;
+			if (header && !$(header).closest('section, article')[0]) {
+				addRole(header, 'banner');
+			}
+			if (!footerLen) {
+				return;
+			}
+			var footer = footers[footerLen - 1];
+			if (!$(footer).closest('section, article')[0]) {
+				addRole(footer, 'contentinfo');
+			}
+		}
+	});
+	
 })(jQuery, document);
 
 //additional tests for partial implementation of forms features
 (function($){
 	"use strict";
+	var isWebkit = /webkit/i.test(navigator.userAgent);
 	var Modernizr = window.Modernizr;
 	var webshims = $.webshims;
 	var bugs = webshims.bugs;
@@ -993,80 +998,80 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	
 	if(!Modernizr.formvalidation || bugs.bustedValidity){
 		testRequiredFind();
-		return;
-	}
-	
-	//create delegatable events
-	webshims.capturingEvents(['input']);
-	webshims.capturingEvents(['invalid'], true);
-	
-	if(window.opera || window.testGoodWithFix){
+	} else {
+		//create delegatable events
+		webshims.capturingEvents(['input']);
+		webshims.capturingEvents(['invalid'], true);
 		
-		form.appendTo('head');
-		
-		testRequiredFind();
-		bugs.validationMessage = !(inputElem.prop('validationMessage'));
-		
-		webshims.reTest(['form-native-extend', 'form-message']);
-		
-		form.remove();
+		if(window.opera || window.testGoodWithFix){
 			
-		$(function(){
-			onDomextend(function(){
+			form.appendTo('head');
+			
+			testRequiredFind();
+			bugs.validationMessage = !(inputElem.prop('validationMessage'));
+			
+			webshims.reTest(['form-native-extend', 'form-message']);
+			
+			form.remove();
 				
-				//Opera shows native validation bubbles in case of input.checkValidity()
-				// Opera 11.6/12 hasn't fixed this issue right, it's buggy
-				var preventDefault = function(e){
-					e.preventDefault();
-				};
-				
-				['form', 'input', 'textarea', 'select'].forEach(function(name){
-					var desc = webshims.defineNodeNameProperty(name, 'checkValidity', {
-						prop: {
-							value: function(){
-								if (!webshims.fromSubmit) {
-									$(this).on('invalid.checkvalidity', preventDefault);
+			$(function(){
+				onDomextend(function(){
+					
+					//Opera shows native validation bubbles in case of input.checkValidity()
+					// Opera 11.6/12 hasn't fixed this issue right, it's buggy
+					var preventDefault = function(e){
+						e.preventDefault();
+					};
+					
+					['form', 'input', 'textarea', 'select'].forEach(function(name){
+						var desc = webshims.defineNodeNameProperty(name, 'checkValidity', {
+							prop: {
+								value: function(){
+									if (!webshims.fromSubmit) {
+										$(this).on('invalid.checkvalidity', preventDefault);
+									}
+									
+									webshims.fromCheckValidity = true;
+									var ret = desc.prop._supvalue.apply(this, arguments);
+									if (!webshims.fromSubmit) {
+										$(this).unbind('invalid.checkvalidity', preventDefault);
+									}
+									webshims.fromCheckValidity = false;
+									return ret;
 								}
-								
-								webshims.fromCheckValidity = true;
-								var ret = desc.prop._supvalue.apply(this, arguments);
-								if (!webshims.fromSubmit) {
-									$(this).unbind('invalid.checkvalidity', preventDefault);
-								}
-								webshims.fromCheckValidity = false;
-								return ret;
 							}
-						}
+						});
 					});
+					
+				});
+			});
+		}
+		
+		if(isWebkit && !webshims.bugs.bustedValidity){
+			(function(){
+				var elems = /^(?:textarea|input)$/i;
+				var form = false;
+				
+				document.addEventListener('contextmenu', function(e){
+					if(elems.test( e.target.nodeName || '') && (form = e.target.form)){
+						setTimeout(function(){
+							form = false;
+						}, 1);
+					}
+				}, false);
+				
+				$(window).on('invalid', function(e){
+					if(e.originalEvent && form && form == e.target.form){
+						e.wrongWebkitInvalid = true;
+						e.stopImmediatePropagation();
+					}
 				});
 				
-			});
-		});
+			})();
+		}
 	}
 	
-	if($.browser.webkit && !webshims.bugs.bustedValidity){
-		(function(){
-			var elems = /^(?:textarea|input)$/i;
-			var form = false;
-			
-			document.addEventListener('contextmenu', function(e){
-				if(elems.test( e.target.nodeName || '') && (form = e.target.form)){
-					setTimeout(function(){
-						form = false;
-					}, 1);
-				}
-			}, false);
-			
-			$(window).on('invalid', function(e){
-				if(e.originalEvent && form && form == e.target.form){
-					e.wrongWebkitInvalid = true;
-					e.stopImmediatePropagation();
-				}
-			});
-			
-		})();
-	}
-})(jQuery);
+
 
 jQuery.webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
@@ -1181,7 +1186,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 		return false;
 	};
 	
-	if(Modernizr.formvalidation && $.browser.webkit && !webshims.bugs.bustedValidity && webshims.browserVersion < 27){
+	if(Modernizr.formvalidation && isWebkit && !webshims.bugs.bustedValidity){
 		(function(){
 			var retriggerRadioValidity = function(){
 				var validity;
@@ -1360,7 +1365,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 	
 	
 	var setRoot = function(){
-		webshims.scrollRoot = ($.browser.webkit || document.compatMode == 'BackCompat') ?
+		webshims.scrollRoot = (isWebkit || document.compatMode == 'BackCompat') ?
 			$(document.body) : 
 			$(document.documentElement)
 		;
@@ -1382,7 +1387,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 	
 	/* some extra validation UI */
 	webshims.validityAlert = (function(){
-		var alertElem = (!$.browser.msie || parseInt($.browser.version, 10) > 7) ? 'span' : 'label';
+		var alertElem = 'span';
 		var errorBubble;
 		var hideTimer = false;
 		var focusTimer = false;
@@ -1497,7 +1502,7 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 				errorBubble = api.errorBubble = $('<'+alertElem+' class="validity-alert-wrapper" role="alert"><span  class="validity-alert"><span class="va-arrow"><span class="va-arrow-box"></span></span><span class="va-box"></span></span></'+alertElem+'>').css({position: 'absolute', display: 'none'});
 				webshims.ready('DOM', function(){
 					errorBubble.appendTo('body');
-					if($.fn.bgIframe && $.browser.msie && parseInt($.browser.version, 10) < 7){
+					if($.fn.bgIframe){
 						errorBubble.bgIframe();
 					}
 				});
@@ -1577,8 +1582,9 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 			});
 		});
 	}
-	
 });
+
+})(jQuery);
 (function($, Modernizr, webshims){
 	"use strict";
 	var hasNative = Modernizr.audio && Modernizr.video;
@@ -1631,7 +1637,9 @@ jQuery.webshims.register('form-core', function($, webshims, window, document, un
 							if(hasSwf && !options.preferFlash && webshims.mediaelement.createSWF && !$(e.target).closest('audio, video').is('.nonnative-api-active')){
 								options.preferFlash = true;
 								document.removeEventListener('error', switchOptions, true);
-								$('audio, video').mediaLoad();
+								$('audio, video').each(function(){
+									webshims.mediaelement.selectSource(this);
+								});
 								webshims.info("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src);
 							} else if(!hasSwf){
 								document.removeEventListener('error', switchOptions, true);
@@ -2035,7 +2043,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		data = data || webshims.data(elem, 'mediaelement');
 		stepSources(elem, data, options.preferFlash || undefined, _srces);
 	};
-	
+	mediaelement.selectSource = selectSource;
 	
 	$(document).on('ended', function(e){
 		var data = webshims.data(e.target, 'mediaelement');
@@ -2101,52 +2109,57 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			var media = $('video, audio', context)
 				.add(insertedElement.filter('video, audio'))
 				.each(function(){
-					if($.browser.msie && webshims.browserVersion > 8 && $.prop(this, 'paused') && !$.prop(this, 'readyState') && $(this).is('audio[preload="none"][controls]:not([autoplay])')){
+					var data = webshims.data(this, 'mediaelement');
+					
+					if(hasNative && $.prop(this, 'paused') && !$.prop(this, 'readyState') && $(this).is('audio[preload="none"][controls]:not([autoplay])') && (!data || data.isActive == 'html5')){
+						//IE controls not visible bug
 						$(this).prop('preload', 'metadata').mediaLoad();
 					} else {
-						selectSource(this);
+						selectSource(this, data);
 					}
 					
-					
-					
 					if(hasNative){
-						var bufferTimer;
-						var lastBuffered;
-						var elem = this;
-						var getBufferedString = function(){
-							var buffered = $.prop(elem, 'buffered');
-							if(!buffered){return;}
-							var bufferString = "";
-							for(var i = 0, len = buffered.length; i < len;i++){
-								bufferString += buffered.end(i);
-							}
-							return bufferString;
-						};
-						var testBuffer = function(){
-							var buffered = getBufferedString();
-							if(buffered != lastBuffered){
-								lastBuffered = buffered;
-								$(elem).triggerHandler('progress');
-							}
-						};
 						
-						$(this)
-							.on({
-								'play loadstart progress': function(e){
-									if(e.type == 'progress'){
-										lastBuffered = getBufferedString();
-									}
-									clearTimeout(bufferTimer);
-									bufferTimer = setTimeout(testBuffer, 999);
-								},
-								'emptied stalled mediaerror abort suspend': function(e){
-									if(e.type == 'emptied'){
-										lastBuffered = false;
-									}
-									clearTimeout(bufferTimer);
+						//FF progress bug
+						(function(){
+							var bufferTimer;
+							var lastBuffered;
+							var elem = this;
+							var getBufferedString = function(){
+								var buffered = $.prop(elem, 'buffered');
+								if(!buffered){return;}
+								var bufferString = "";
+								for(var i = 0, len = buffered.length; i < len;i++){
+									bufferString += buffered.end(i);
 								}
-							})
-						;
+								return bufferString;
+							};
+							var testBuffer = function(){
+								var buffered = getBufferedString();
+								if(buffered != lastBuffered){
+									lastBuffered = buffered;
+									$(elem).triggerHandler('progress');
+								}
+							};
+							
+							$(this)
+								.on({
+									'play loadstart progress': function(e){
+										if(e.type == 'progress'){
+											lastBuffered = getBufferedString();
+										}
+										clearTimeout(bufferTimer);
+										bufferTimer = setTimeout(testBuffer, 999);
+									},
+									'emptied stalled mediaerror abort suspend': function(e){
+										if(e.type == 'emptied'){
+											lastBuffered = false;
+										}
+										clearTimeout(bufferTimer);
+									}
+								})
+							;
+						})();
 					}
 					
 				})
@@ -2180,6 +2193,7 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 	"use strict";
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
+	var ADDBACK = $.fn.addBack ? 'addBack' : 'andSelf';
 	//descriptions are not really shown, but they are inserted into the dom
 	var showTracks = {subtitles: 1, captions: 1, descriptions: 1};
 	var notImplemented = function(){
@@ -2567,7 +2581,7 @@ jQuery.webshims.register('track', function($, webshims, window, document, undefi
 				}
 				
 				trackData = webshims.data(track, 'trackData', {track: obj});
-				mediaelement.loadTextTrack(mediaelem, track, trackData, ($.prop(track, 'default') && $(track).siblings('track[default]').andSelf()[0] == track));
+				mediaelement.loadTextTrack(mediaelem, track, trackData, ($.prop(track, 'default') && $(track).siblings('track[default]')[ADDBACK]()[0] == track));
 			} else {
 				if(supportTrackMod){
 					copyProps.forEach(function(copyProp){

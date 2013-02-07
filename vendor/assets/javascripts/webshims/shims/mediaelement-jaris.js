@@ -366,6 +366,11 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
+		var opposite = {
+			'html5': 'third',
+			'third': 'html5'
+		};
+		
 		
 		var hidePlayerEvents = function(event){
 			var data = webshims.data(event.target, 'mediaelement');
@@ -373,8 +378,14 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 			if( isNativeHTML5 == (data.activating == 'third') ){
 				event.stopImmediatePropagation();
-				if(stopEvents[event.type] && data.isActive != data.activating){
-					$(event.target).pause();
+				if(stopEvents[event.type]){
+					if(data.isActive != data.activating){
+						$(event.target).pause();
+					} else {
+						data.isActive = opposite[data.isActive];
+						$(event.target).pause();
+						data.isActive = opposite[data.isActive];
+					}
 				}
 			}
 		};
@@ -508,6 +519,10 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			box = data.shadowElem;
 			resetSwfProps(data);
 		} else {
+			var setDimensions = function(){
+				setElementDimension(data, $.prop(elem, 'controls'));
+			};
+			
 			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
 				.css({
 					position: 'relative',
@@ -567,9 +582,8 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			webshims.addShadowDom(elem, box);
 			addMediaToStopEvents(elem);
 			mediaelement.setActive(elem, 'third', data);
-			$(elem).on('updatemediaelementdimensions updateshadowdom', function(){
-				setElementDimension(data, $.prop(elem, 'controls'));
-			});
+			$(document).on('updateshadowdom', setDimensions);
+			$(elem).on('updatemediaelementdimensions', setDimensions);
 		}
 		
 		if(!mediaelement.jarisEvent[data.id]){
@@ -805,9 +819,8 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
 	});
 	
-	if(hasFlash){
+	if(hasFlash && $.cleanData){
 		var oldClean = $.cleanData;
-		var gcBrowser = $.browser.msie && webshims.browserVersion < 9;
 		var flashNames = {
 			object: 1,
 			OBJECT: 1
@@ -824,15 +837,13 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 								elems[i].api_pause();
 							} catch(er){}
 						}
-						if(gcBrowser){
-							try {
-								for (prop in elems[i]) {
-									if (typeof elems[i][prop] == "function") {
-										elems[i][prop] = null;
-									}
+						try {
+							for (prop in elems[i]) {
+								if (typeof elems[i][prop] == "function") {
+									elems[i][prop] = null;
 								}
-							} catch(er){}
-						}
+							}
+						} catch(er){}
 					}
 				}
 				

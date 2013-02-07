@@ -455,18 +455,28 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
-		
+		var opposite = {
+			'html5': 'third',
+			'third': 'html5'
+		};
 		var hidePlayerEvents = function(event){
 			var data = webshims.data(event.target, 'mediaelement');
 			if(!data){return;}
 			var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 			if( isNativeHTML5 == (data.activating == 'third') ){
 				event.stopImmediatePropagation();
-				if(stopEvents[event.type] && data.isActive != data.activating){
-					$(event.target).pause();
+				if(stopEvents[event.type]){
+					if(data.isActive != data.activating){
+						$(event.target).pause();
+					} else {
+						data.isActive = opposite[data.isActive];
+						$(event.target).pause();
+						data.isActive = opposite[data.isActive];
+					}
 				}
 			}
 		};
+		
 		
 		addMediaToStopEvents = function(elem){
 			$(elem)
@@ -599,6 +609,10 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 				overflow: 'hidden'
 			})
 		;
+		var setDimensions = function(){
+			setElementDimension(data, $.prop(elem, 'controls'));
+		};
+			
 		data = webshims.data(elem, 'mediaelement', webshims.objectCreate(playerStateObj, {
 			actionQueue: {
 				value: []
@@ -671,9 +685,9 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		
-		$(elem).on('updatemediaelementdimensions updateshadowdom', function(){
-			setElementDimension(data, $.prop(elem, 'controls'));
-		});
+		
+		$(document).on('updateshadowdom', setDimensions);
+		$(elem).on('updatemediaelementdimensions', setDimensions);
 		
 		
 		swfobject.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.0", false, vars, params, attrs, function(swfData){
@@ -876,9 +890,8 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
 	});
 	
-	if(hasFlash){
+	if(hasFlash && $.cleanData){
 		var oldClean = $.cleanData;
-		var gcBrowser = $.browser.msie && webshims.browserVersion < 9;
 		var flashNames = {
 			object: 1,
 			OBJECT: 1
@@ -895,15 +908,13 @@ jQuery.webshims.register('mediaelement-swf', function($, webshims, window, docum
 								elems[i][SENDEVENT]('play', false);
 							} catch(er){}
 						}
-						if(gcBrowser){
-							try {
-								for (prop in elems[i]) {
-									if (typeof elems[i][prop] == "function") {
-										elems[i][prop] = null;
-									}
+						try {
+							for (prop in elems[i]) {
+								if (typeof elems[i][prop] == "function") {
+									elems[i][prop] = null;
 								}
-							} catch(er){}
-						}
+							}
+						} catch(er){}
 					}
 				}
 				
