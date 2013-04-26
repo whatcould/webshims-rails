@@ -1,6 +1,6 @@
 module Webshims
   module Rails
-    VERSION = "0.4.7"
-    WEBSHIMS_VERSION = "1.9.6"
+    VERSION = "1.10.3"
+    WEBSHIMS_VERSION = "1.10.3"
   end
 end

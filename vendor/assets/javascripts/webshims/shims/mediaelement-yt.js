@@ -158,10 +158,6 @@ var addMediaToStopEvents = $.noop;
 	var hidevents = hideEvtArray.map(function(evt){
 		return evt +'.webshimspolyfill';
 	}).join(' ');
-	var opposite = {
-		'html5': 'third',
-		'third': 'html5'
-	};
 	
 	var hidePlayerEvents = function(event){
 		var data = webshims.data(event.target, 'mediaelement');
@@ -169,14 +165,8 @@ var addMediaToStopEvents = $.noop;
 		var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 		if( isNativeHTML5 == (data.activating == 'third') ){
 			event.stopImmediatePropagation();
-			if(stopEvents[event.type]){
-				if(data.isActive != data.activating){
-					$(event.target).pause();
-				} else {
-					data.isActive = opposite[data.isActive];
-					$(event.target).pause();
-					data.isActive = opposite[data.isActive];
-				}
+			if(stopEvents[event.type] && data.isActive != data.activating){
+				$(event.target).pause();
 			}
 		}
 	};
@@ -310,6 +300,8 @@ var addYtAPI = function(mediaElm, elemId, data, ytID){
 		data._ytAPI = new YT.Player(elemId, {
 			height: '100%',
 			width: '100%',
+			allowfullscreen: 'allowfullscreen',
+			webkitallowfullscreen: 'allowfullscreen',
 			playerVars: {
 				allowfullscreen: true,
 				fs: 1,
@@ -406,10 +398,10 @@ mediaelement.createSWF = function(mediaElem, src, data){
 			overflow: 'hidden'
 		})
 	;
-	var setDimensions = function(){
+	var setDimension = function(){
 		setElementDimension(data);
 	};
-			
+	
 	
 	
 	data = webshims.data(mediaElem, 'mediaelement', webshims.objectCreate(playerStateObj, {
@@ -453,8 +445,8 @@ mediaelement.createSWF = function(mediaElem, src, data){
 	addMediaToStopEvents(mediaElem);
 	
 	addYtAPI(mediaElem, elemId, data, ytID);
-	$(document).on('updateshadowdom', setDimensions);
-	$(mediaElem).on('updatemediaelementdimensions', setDimensions);
+	$(mediaElem).on('updatemediaelementdimensions', setDimension);
+	$(document).on('updateshadowdom', setDimension);
 };
 
 (function(){

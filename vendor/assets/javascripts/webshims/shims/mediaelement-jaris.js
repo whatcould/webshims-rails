@@ -2,9 +2,9 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 	"use strict";
 	
 	var mediaelement = webshims.mediaelement;
-	var swfobject = window.swfobject;
+	var swfmini = window.swfmini;
 	var hasNative = Modernizr.audio && Modernizr.video;
-	var hasFlash = swfobject.hasFlashPlayerVersion('9.0.115');
+	var hasFlash = swfmini.hasFlashPlayerVersion('9.0.115');
 	var loadedSwf = 0;
 	var getProps = {
 		paused: true,
@@ -366,11 +366,6 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
-		var opposite = {
-			'html5': 'third',
-			'third': 'html5'
-		};
-		
 		
 		var hidePlayerEvents = function(event){
 			var data = webshims.data(event.target, 'mediaelement');
@@ -378,14 +373,8 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 			if( isNativeHTML5 == (data.activating == 'third') ){
 				event.stopImmediatePropagation();
-				if(stopEvents[event.type]){
-					if(data.isActive != data.activating){
-						$(event.target).pause();
-					} else {
-						data.isActive = opposite[data.isActive];
-						$(event.target).pause();
-						data.isActive = opposite[data.isActive];
-					}
+				if(stopEvents[event.type] && data.isActive != data.activating){
+					$(event.target).pause();
 				}
 			}
 		};
@@ -462,6 +451,31 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		}
 	};
 	
+	var bufferSrc = (function(){
+		var preloads = {
+			'': 1,
+			'auto': 1
+		};
+		return function(elem){
+			var preload = $.attr(elem, 'preload');
+			if(preload == null || preload == 'none' || $.prop(elem, 'autoplay')){
+				return false;
+			}
+			preload =  $.prop(elem, 'preload');
+			return !!(preloads[preload] || (preload == 'metadata' && $(elem).is('.preload-in-doubt, video:not([poster])')));
+		};
+	})();
+	
+	var regs = {
+		A: /&amp;/g,
+		a: /&/g,
+		e: /\=/g,
+		q: /\?/g
+	},
+	replaceVar = function(val){
+		return (val.replace) ? val.replace(regs.A, '%26').replace(regs.a, '%26').replace(regs.e, '%3D').replace(regs.q, '%3F') : val;
+	};
+	
 	mediaelement.createSWF = function( elem, canPlaySrc, data ){
 		if(!hasFlash){
 			setTimeout(function(){
@@ -475,17 +489,23 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		} else {
 			loadedSwf++;
 		}
-		var isRtmp = canPlaySrc.type == 'audio/rtmp' || canPlaySrc.type == 'video/rtmp';
-		var vars = $.extend({}, options.vars, {
-				poster: $.attr(elem, 'poster') && $.prop(elem, 'poster') || '',
-				source: canPlaySrc.streamId || canPlaySrc.srcProp,
-				server: canPlaySrc.server || ''
-		});
-		var elemVars = $(elem).data('vars') || {};
-		
 		if(!data){
 			data = webshims.data(elem, 'mediaelement');
 		}
+		
+		if($.attr(elem, 'height') || $.attr(elem, 'width')){
+			webshims.warn("width or height content attributes used. Webshims only uses CSS (computed styles or inline styles) to detect size of a video/audio");
+		}
+		
+		var isRtmp = canPlaySrc.type == 'audio/rtmp' || canPlaySrc.type == 'video/rtmp';
+		var vars = $.extend({}, options.vars, {
+				poster: replaceVar($.attr(elem, 'poster') && $.prop(elem, 'poster') || ''),
+				source: replaceVar(canPlaySrc.streamId || canPlaySrc.srcProp),
+				server: replaceVar(canPlaySrc.server || '')
+		});
+		var elemVars = $(elem).data('vars') || {};
+		
+		
 		
 		var hasControls = $.prop(elem, 'controls');
 		var elemId = 'jarisplayer-'+ webshims.getID(elem);
@@ -505,6 +525,10 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			},
 			$(elem).data('attrs')
 		);
+		var setDimension = function(){
+			setElementDimension(data, $.prop(elem, 'controls'));
+		};
+		
 		var box;
 		
 		if(data && data.swfCreated){
@@ -519,10 +543,6 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			box = data.shadowElem;
 			resetSwfProps(data);
 		} else {
-			var setDimensions = function(){
-				setElementDimension(data, $.prop(elem, 'controls'));
-			};
-			
 			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
 				.css({
 					position: 'relative',
@@ -582,19 +602,25 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			webshims.addShadowDom(elem, box);
 			addMediaToStopEvents(elem);
 			mediaelement.setActive(elem, 'third', data);
-			$(document).on('updateshadowdom', setDimensions);
-			$(elem).on('updatemediaelementdimensions', setDimensions);
+			$(elem).on('updatemediaelementdimensions', setDimension);
+			$(document).on('updateshadowdom', setDimension);
 		}
 		
 		if(!mediaelement.jarisEvent[data.id]){
 			mediaelement.jarisEvent[data.id] = function(jaris){
 				if(jaris.type == 'ready'){
+					var onReady = function(){
+						if(data.api){
+							if(bufferSrc(elem)){
+								data.api.api_preload();
+							}
+							onEvent.ready(jaris, data);
+						}
+					};
 					if(data.api){
-						onEvent[jaris.type](jaris, data);
+						onReady();
 					} else {
-						setTimeout(function(){
-							onEvent[jaris.type](jaris, data);
-						}, 9);
+						setTimeout(onReady, 9);
 					}
 				} else {
 					data.currentTime = jaris.position;
@@ -639,7 +665,8 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 		}
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		clearTimeout(data.flashBlock);
-		swfobject.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.0", false, vars, params, attrs, function(swfData){
+		
+		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.115", false, vars, params, attrs, function(swfData){
 			
 			if(swfData.success){
 				
@@ -807,12 +834,19 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			$(this)[boolProp ? 'addClass' : 'removeClass']('webshims-controls');
 			
 			if(data){
-				webshims.warn("changing controls currently not fully supported with jaris player");
 				if(nodeName == 'audio'){
 					setElementDimension(data, boolProp);
 				}
-				
 				queueSwfMethod(this, 'api_controls', [boolProp], data);
+			}
+		});
+		
+		webshims.onNodeNamesPropertyModify(nodeName, 'preload', function(val){
+			var data = getSwfDataFromElem(this);
+			
+			
+			if(data && bufferSrc(this)){
+				queueSwfMethod(this, 'api_preload', [], data);
 			}
 		});
 		
@@ -825,6 +859,7 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 			object: 1,
 			OBJECT: 1
 		};
+		
 		$.cleanData = function(elems){
 			var i, len, prop;
 			if(elems && (len = elems.length) && loadedSwf){
@@ -837,13 +872,6 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 								elems[i].api_pause();
 							} catch(er){}
 						}
-						try {
-							for (prop in elems[i]) {
-								if (typeof elems[i][prop] == "function") {
-									elems[i][prop] = null;
-								}
-							}
-						} catch(er){}
 					}
 				}
 				
@@ -860,6 +888,13 @@ jQuery.webshims.register('mediaelement-jaris', function($, webshims, window, doc
 				reflect: true,
 				propType: 'src'
 			});
+		});
+		
+		webshims.defineNodeNamesProperty(['audio', 'video'], 'preload', {
+			reflect: true,
+			propType: 'enumarated',
+			defaultValue: '',
+			limitedTo: ['', 'auto', 'metadata', 'none']
 		});
 		
 		
