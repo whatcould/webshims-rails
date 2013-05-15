@@ -1,8 +1,8 @@
 //DOM-Extension helper
-jQuery.webshims.register('dom-extend', function($, webshims, window, document, undefined){
+webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
 	
-	webshims.assumeARIA = Modernizr.localstorage || Modernizr.video || Modernizr.boxsizing;
+	webshims.assumeARIA = $.support.getSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
 		webshims.error("IE browser modes are busted in IE10. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
@@ -11,6 +11,57 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	if(!$.parseHTML){
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
+	if (!webshims.cfg.no$Switch) {
+		var switch$ = function(){
+			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
+				webshims.error("jQuery was included more than once. Make sure to include it only once! Webshims and other Plugins might not work properly.");
+				if (window.$) {
+					window.$ = webshims.$;
+				}
+				window.jQuery = webshims.$;
+			}
+			if(webshims.M != Modernizr){
+				webshims.error("Modernizr was included more than once. Make sure to include it only once! Webshims and other scripts might not work properly.");
+				for(var i in Modernizr){
+					if(!(i in webshims.M)){
+						webshims.M[i] = Modernizr[i];
+					}
+				}
+				Modernizr = webshims.M;
+			}
+		};
+		switch$();
+		setTimeout(switch$, 90);
+		$(switch$);
+	}
+//	(function(){
+//		var hostNames = {
+//			'afarkas.github.io': 1,
+//			localhost: 1,
+//			'127.0.0.1': 1
+//		};
+//		
+//		if( webshims.debug && (hostNames[location.hostname] || location.protocol == 'file:') ){
+//			var list = $('<ul class="webshims-debug-list" />');
+//			webshims.errorLog.push = function(message){
+//				list.appendTo('body');
+//				$('<li style="display: none;">'+ message +'</li>')
+//					.appendTo(list)
+//					.slideDown()
+//					.delay(3000)
+//					.slideUp(function(){
+//						$(this).remove();
+//						if(!$('li', list).length){
+//							list.detach();
+//						}
+//					})
+//				;
+//			};
+//			$.each(webshims.errorLog, function(i, message){
+//				webshims.errorLog.push(message);
+//			});
+//		}
+//	})();
 
 	//shortcus
 	var modules = webshims.modules;
@@ -27,6 +78,24 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	var singleVal = function(elem, name, val, pass, _argless){
 		return (_argless) ? oldVal.call($(elem)) : oldVal.call($(elem), val);
 	};
+	
+	//jquery mobile and jquery ui
+	if(!$.widget){
+		(function(){
+			var _cleanData = $.cleanData;
+			$.cleanData = function( elems ) {
+				if(!$.widget){
+					for ( var i = 0, elem; (elem = elems[i]) != null; i++ ) {
+						try {
+							$( elem ).triggerHandler( "remove" );
+						// http://bugs.jquery.com/ticket/8235
+						} catch( e ) {}
+					}
+				}
+				_cleanData( elems );
+			};
+		})();
+	}
 	
 
 	$.fn.val = function(val){
@@ -59,6 +128,18 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	};
 	$.fn.onTrigger = function(evt, fn){
 		return this.on(evt, fn).each(fn);
+	};
+	
+	$.fn.onWSOff = function(evt, fn, trigger, evtDel){
+		if(!evtDel){
+			evtDel = document;
+		}
+		$(evtDel)[trigger ? 'onTrigger' : 'on'](evt, fn);
+		this.on('remove', function(e){
+			if(!e.originalEvent){
+				$(evtDel).off(evt, fn);
+			}
+		});
 	};
 	
 	var dataID = '_webshimsLib'+ (Math.round(Math.random() * 1000));
@@ -422,7 +503,7 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 		implement: function(elem, type){
 			var data = elementData(elem, 'implemented') || elementData(elem, 'implemented', {});
 			if(data[type]){
-				webshims.info(type +' already implemented for element #'+elem.id);
+				webshims.warn(type +' already implemented for element #'+elem.id);
 				return false;
 			}
 			data[type] = true;
@@ -565,6 +646,12 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 					}
 					shadowFocusElementData = $.data(opts.shadowFocusElement, dataID) || $.data(opts.shadowFocusElement, dataID, shadowFocusElementData);
 				}
+				
+				$(nativeElem).on('remove', function(e){
+					if (!e.originalEvent) {
+						$(shadowElem).remove();
+					}
+				});
 				
 				nativeData.hasShadow = shadowElem;
 				shadowFocusElementData.nativeElement = shadowData.nativeElement = nativeElem;
@@ -1041,11 +1128,15 @@ jQuery.webshims.register('dom-extend', function($, webshims, window, document, u
 	
 })(jQuery, document);
 
-jQuery.webshims.register('form-message', function($, webshims, window, document, undefined, options){
+webshims.register('form-message', function($, webshims, window, document, undefined, options){
 	"use strict";
+	if(options.overrideMessages){
+		options.customMessages = true;
+		webshims.error('overrideMessages is deprecated. use customMessages instead.');
+	}
 	var validityMessages = webshims.validityMessages;
 	
-	var implementProperties = (options.overrideMessages || options.customMessages) ? ['customValidationMessage'] : [];
+	var implementProperties = options.customMessages ? ['customValidationMessage'] : [];
 	
 	validityMessages.en = $.extend(true, {
 		typeMismatch: {
@@ -1076,17 +1167,17 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	
 	if(typeof validityMessages['en'].valueMissing == 'object'){
 		['select', 'radio'].forEach(function(type){
-			validityMessages.en.valueMissing[type] = 'Please select an option.';
+			validityMessages.en.valueMissing[type] = validityMessages.en.valueMissing[type] || 'Please select an option.';
 		});
 	}
 	if(typeof validityMessages.en.rangeUnderflow == 'object'){
 		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.en.rangeUnderflow[type] = 'Value must be at or after {%min}.';
+			validityMessages.en.rangeUnderflow[type] = validityMessages.en.rangeUnderflow[type] || 'Value must be at or after {%min}.';
 		});
 	}
 	if(typeof validityMessages.en.rangeOverflow == 'object'){
 		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.en.rangeOverflow[type] = 'Value must be at or before {%max}.';
+			validityMessages.en.rangeOverflow[type] = validityMessages.en.rangeOverflow[type] || 'Value must be at or before {%max}.';
 		});
 	}
 	
@@ -1122,17 +1213,17 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	
 	if(typeof validityMessages.de.valueMissing == 'object'){
 		['select', 'radio'].forEach(function(type){
-			validityMessages.de.valueMissing[type] = 'Bitte wählen Sie eine Option aus.';
+			validityMessages.de.valueMissing[type] = validityMessages.de.valueMissing[type] || 'Bitte wählen Sie eine Option aus.';
 		});
 	}
 	if(typeof validityMessages.de.rangeUnderflow == 'object'){
 		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.de.rangeUnderflow[type] = '{%value} ist zu früh. {%min} ist die früheste Zeit, die Sie benutzen können.';
+			validityMessages.de.rangeUnderflow[type] = validityMessages.de.rangeUnderflow[type] || '{%value} ist zu früh. {%min} ist die früheste Zeit, die Sie benutzen können.';
 		});
 	}
 	if(typeof validityMessages.de.rangeOverflow == 'object'){
 		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.de.rangeOverflow[type] = '{%value} ist zu spät. {%max} ist die späteste Zeit, die Sie benutzen können.';
+			validityMessages.de.rangeOverflow[type] = validityMessages.de.rangeOverflow[type] || '{%value} ist zu spät. {%max} ist die späteste Zeit, die Sie benutzen können.';
 		});
 	}
 	
@@ -1150,12 +1241,12 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	};
 	
 	webshims.createValidationMessage = function(elem, name){
-		var spinner;
+		var widget;
 		var message = getMessageFromObj(currentValidationMessage[name], elem);
-		
+		var type = $.prop(elem, 'type');
 		if(!message){
-			message = getMessageFromObj(validityMessages[''][name], elem) || 'invalid value';
-			webshims.info('could not find errormessage for: '+ name +' / '+ $.prop(elem, 'type') +'. in language: '+$.webshims.activeLang());
+			message = getMessageFromObj(validityMessages[''][name], elem) || $.prop(elem, 'validationMessage');
+			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+$.webshims.activeLang());
 		}
 		if(message){
 			['value', 'min', 'max', 'title', 'maxlength', 'label'].forEach(function(attr){
@@ -1165,11 +1256,11 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
 				}
 				if(valueVals[attr]){
-					if(!spinner){
-						spinner = $(elem).getShadowElement().data('wsspinner');
+					if(!widget){
+						widget = $(elem).getShadowElement().data('wsWidget'+type);
 					}
-					if(spinner && spinner.formatValue){
-						val = spinner.formatValue(val, false);
+					if(widget && widget.formatValue){
+						val = widget.formatValue(val, false);
 					}
 				}
 				message = message.replace('{%'+ attr +'}', val);
@@ -1184,7 +1275,7 @@ jQuery.webshims.register('form-message', function($, webshims, window, document,
 	};
 	
 	
-	if(webshims.bugs.validationMessage || !Modernizr.formvalidation || webshims.bugs.bustedValidity){
+	if(!Modernizr.formvalidation || webshims.bugs.bustedValidity){
 		implementProperties.push('validationMessage');
 	}
 	
