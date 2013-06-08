@@ -573,12 +573,13 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		$.expr[":"][name] = $.expr.filters[name+"-element"];
 	});
 	
-	
-	$.expr[":"].focus = function( elem ) {
+	var pseudoFocus = $.expr[":"].focus;
+	$.expr[":"].focus = function(){
 		try {
-			var doc = elem.ownerDocument;
-			return elem === doc.activeElement && (!doc.hasFocus || doc.hasFocus());
-		} catch(e){}
+			return pseudoFocus.apply(this, arguments);
+		} catch(e){
+			webshims.error(e);
+		}
 		return false;
 	};
 	
@@ -593,7 +594,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		});
 	};
 	
-	
+	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
 	webshims.wsPopover = {
 		id: 0,
 		_create: function(){
@@ -601,7 +602,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			this.id = webshims.wsPopover.id++;
 			this.eventns = '.wsoverlay' + this.id;
 			this.timers = {};
-			this.element = $('<div class="ws-popover" tabindex="-1"><div class="ws-po-outerbox"><div class="ws-po-arrow"><div class="ws-po-arrowbox" /></div><div class="ws-po-box" /></div></div>');
+			this.element = $('<div class="ws-popover'+transClass+'" tabindex="-1"><div class="ws-po-outerbox"><div class="ws-po-arrow"><div class="ws-po-arrowbox" /></div><div class="ws-po-box" /></div></div>');
 			this.contentElement = $('.ws-po-box', this.element);
 			this.lastElement = $([]);
 			this.bindElement();
@@ -639,6 +640,57 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 	};
 	
+	
+	webshims.getContentValidationMessage = function(elem, validity, key){
+		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
+		if(key && message[key]){
+			message = message[key];
+		}
+		if(typeof message == 'object'){
+			validity = validity || $.prop(elem, 'validity') || {valid: 1};
+			if(!validity.valid){
+				$.each(validity, function(name, prop){
+					if(prop && name != 'valid' && message[name]){
+						message = message[name];
+						return false;
+					}
+				});
+			}
+		}
+		
+		if(typeof message == 'object'){
+			message = message.defaultMessage;
+		}
+		return message || '';
+	};
+	
+	$.fn.getErrorMessage = function(key){
+		var message = '';
+		var elem = this[0];
+		if(elem){
+			message = webshims.getContentValidationMessage(elem, false, key) || $.prop(elem, 'customValidationMessage') || $.prop(elem, 'validationMessage');
+		}
+		return message;
+	};
+	
+	
+	$(document).on('focusin.lazyloadvalidation', function(e){
+		if('form' in e.target && $(e.target).is(':invalid')){
+			lazyLoad();
+		}
+	});
+	webshims.ready('WINDOWLOAD', lazyLoad);
+	
+	if(options.replaceValidationUI){
+		webshims.ready('DOM forms', function(){
+			$(document).on('firstinvalid', function(e){
+				if(!e.isInvalidUIPrevented()){
+					e.preventDefault();
+					webshims.validityAlert.showFor( e.target ); 
+				}
+			});
+		});
+	}
 	
 	/* extension, but also used to fix native implementation workaround/bugfixes */
 	(function(){
@@ -679,66 +731,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			jElm = null;
 		});
 	})();
-	
-	
-	webshims.getContentValidationMessage = function(elem, validity, key){
-		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
-		if(key && message[key]){
-			message = message[key];
-		}
-		if(typeof message == 'object'){
-			validity = validity || $.prop(elem, 'validity') || {valid: 1};
-			if(!validity.valid){
-				$.each(validity, function(name, prop){
-					if(prop && name != 'valid' && message[name]){
-						message = message[name];
-						return false;
-					}
-				});
-			}
-		}
-		
-		if(typeof message == 'object'){
-			message = message.defaultMessage;
-		}
-		return message || '';
-	};
-	
-	$.fn.getErrorMessage = function(key){
-		var message = '';
-		var elem = this[0];
-		if(elem){
-			message = webshims.getContentValidationMessage(elem, false, key) || $.prop(elem, 'customValidationMessage') || $.prop(elem, 'validationMessage');
-		}
-		return message;
-	};
-	
-	
-	webshims.ready('forms', function(){
-		$(document).on('focusin.lazyloadvalidation', function(e){
-			if('form' in e.target && $(e.target).is(':invalid')){
-				lazyLoad();
-			}
-		});
-	});
-	webshims.ready('WINDOWLOAD', lazyLoad);
-	if(options.overrideMessages){
-		options.customMessages = true;
-		webshims.reTest('form-message');
-		webshims.error('overrideMessages is deprecated. use customMessages instead.');
-	}
-	if(options.replaceValidationUI){
-		webshims.ready('DOM forms', function(){
-			$(document).on('firstinvalid', function(e){
-				if(!e.isInvalidUIPrevented()){
-					e.preventDefault();
-					webshims.validityAlert.showFor( e.target ); 
-				}
-			});
-		});
-	}
 });
-
 
 (function($, Modernizr, webshims){
 	"use strict";
@@ -774,51 +767,54 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			});
 			webshims.loader.loadList(['mediaelement-native-fix']);
 		}
-	}
-	
-	if(hasNative && !options.preferFlash){
-		var noSwitch = {
-			1: 1,
-			2: 1
-		};
-		var switchOptions = function(e){
-			var media;
-			var parent;
-			if(!options.preferFlash && 
+		
+		if(!options.preferFlash){
+			var noSwitch = {
+				1: 1,
+				2: 1
+			};
+			var switchOptions = function(e){
+				var media, error, parent;
+				if(!options.preferFlash && 
 				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
-				(media = $(e.target).closest('audio, video')) && !noSwitch[media.prop('error')]
+				(media = $(e.target).closest('audio, video')) && !noSwitch[(error = media.prop('error'))]
 				){
-				$(function(){
-					if(hasSwf && !options.preferFlash){
-						loadSwf();
-						webshims.ready('WINDOWLOAD '+swfType, function(){
-							setTimeout(function(){
-								if(!options.preferFlash && webshims.mediaelement.createSWF && !media.is('.nonnative-api-active')){
-									options.preferFlash = true;
-									document.removeEventListener('error', switchOptions, true);
-									$('audio, video').each(function(){
-										webshims.mediaelement.selectSource(this);
-									});
-									webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error'));
-								}
-							}, 9);
-						});
-					} else{
-						document.removeEventListener('error', switchOptions, true);
+					if(error == null){
+						webshims.warn("There was an unspecified error on a mediaelement");
+						return;
+						
 					}
-				});
-			}
-		};
-		document.addEventListener('error', switchOptions, true);
-		$('audio, video').each(function(){
-			var error = $.prop(this, 'error');
-			if(error && !noSwitch[error]){
-				switchOptions({target: this});
-				return false;
-			}
-		});
+					$(function(){
+						if(hasSwf && !options.preferFlash){
+							loadSwf();
+							webshims.ready('WINDOWLOAD '+swfType, function(){
+								setTimeout(function(){
+									if(!options.preferFlash && webshims.mediaelement.createSWF && !media.is('.nonnative-api-active')){
+										options.preferFlash = true;
+										document.removeEventListener('error', switchOptions, true);
+										$('audio, video').each(function(){
+											webshims.mediaelement.selectSource(this);
+										});
+										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error'));
+									}
+								}, 9);
+							});
+						} else{
+							document.removeEventListener('error', switchOptions, true);
+						}
+					});
+				}
+			};
+			document.addEventListener('error', switchOptions, true);
+			$('audio, video').each(function(){
+				var error = $.prop(this, 'error');
+				if(error && !noSwitch[error]){
+					switchOptions({target: this});
+					return false;
+				}
+			});
+		}
 	}
-	
 	
 	if(Modernizr.track && !bugs.track){
 		(function(){
@@ -1200,63 +1196,14 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		
 	});
 	
-	webshims.ready('dom-support', function(){
-		if(!supportsLoop){
-			webshims.defineNodeNamesBooleanProperty(['audio', 'video'], 'loop');
-		}
-		
-		['audio', 'video'].forEach(function(nodeName){
-			var supLoad = webshims.defineNodeNameProperty(nodeName, 'load',  {
-				prop: {
-					value: function(){
-						var data = webshims.data(this, 'mediaelement');
-						selectSource(this, data);
-						if(hasNative && (!data || data.isActive == 'html5') && supLoad.prop._supvalue){
-							supLoad.prop._supvalue.apply(this, arguments);
-						}
-					}
-				}
-			});
-			nativeCanPlayType[nodeName] = webshims.defineNodeNameProperty(nodeName, 'canPlayType',  {
-				prop: {
-					value: function(type){
-						var ret = '';
-						if(hasNative && nativeCanPlayType[nodeName].prop._supvalue){
-							ret = nativeCanPlayType[nodeName].prop._supvalue.call(this, type);
-							if(ret == 'no'){
-								ret = '';
-							}
-						}
-						if(!ret && hasSwf){
-							type = $.trim((type || '').split(';')[0]);
-							if(mediaelement.swfMimeTypes.indexOf(type) != -1){
-								ret = 'maybe';
-							}
-						}
-						return ret;
-					}
-				}
-			});
-		});
-		webshims.onNodeNamesPropertyModify(['audio', 'video'], ['src', 'poster'], {
-			set: function(){
-				var elem = this;
-				var baseData = webshims.data(elem, 'mediaelementBase') || webshims.data(elem, 'mediaelementBase', {});
-				clearTimeout(baseData.loadTimer);
-				baseData.loadTimer = setTimeout(function(){
-					selectSource(elem);
-					elem = null;
-				}, 9);
-			}
-		});
-	});
-		
+	var handleMedia = false;	
 	var initMediaElements = function(){
 		var testFixMedia = function(){
 			if(webshims.implement(this, 'mediaelement')){
 				selectSource(this);
 				
-				if(hasNative){
+				//fixes for FF 12 and IE9/10 || does not hurt, if run in other browsers
+				if(hasNative && (!supportsLoop || ('ActiveXObject' in window))){
 					var bufferTimer;
 					var lastBuffered;
 					var elem = this;
@@ -1285,7 +1232,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 									lastBuffered = getBufferedString();
 								}
 								clearTimeout(bufferTimer);
-								bufferTimer = setTimeout(testBuffer, 999);
+								bufferTimer = setTimeout(testBuffer, 400);
 							},
 							'emptied stalled mediaerror abort suspend': function(e){
 								if(e.type == 'emptied'){
@@ -1302,11 +1249,62 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			}
 			
 		};
-		var handleMedia = false;
+		
 		
 		
 		webshims.ready('dom-support', function(){
 			handleMedia = true;
+			
+			if(!supportsLoop){
+				webshims.defineNodeNamesBooleanProperty(['audio', 'video'], 'loop');
+			}
+			
+			['audio', 'video'].forEach(function(nodeName){
+				var supLoad = webshims.defineNodeNameProperty(nodeName, 'load',  {
+					prop: {
+						value: function(){
+							var data = webshims.data(this, 'mediaelement');
+							selectSource(this, data);
+							if(hasNative && (!data || data.isActive == 'html5') && supLoad.prop._supvalue){
+								supLoad.prop._supvalue.apply(this, arguments);
+							}
+						}
+					}
+				});
+				nativeCanPlayType[nodeName] = webshims.defineNodeNameProperty(nodeName, 'canPlayType',  {
+					prop: {
+						value: function(type){
+							var ret = '';
+							if(hasNative && nativeCanPlayType[nodeName].prop._supvalue){
+								ret = nativeCanPlayType[nodeName].prop._supvalue.call(this, type);
+								if(ret == 'no'){
+									ret = '';
+								}
+							}
+							if(!ret && hasSwf){
+								type = $.trim((type || '').split(';')[0]);
+								if(mediaelement.swfMimeTypes.indexOf(type) != -1){
+									ret = 'maybe';
+								}
+							}
+							return ret;
+						}
+					}
+				});
+			});
+			webshims.onNodeNamesPropertyModify(['audio', 'video'], ['src', 'poster'], {
+				set: function(){
+					var elem = this;
+					var baseData = webshims.data(elem, 'mediaelementBase') || webshims.data(elem, 'mediaelementBase', {});
+					clearTimeout(baseData.loadTimer);
+					baseData.loadTimer = setTimeout(function(){
+						selectSource(elem);
+						elem = null;
+					}, 9);
+				}
+			});
+			
+			
 			webshims.addReady(function(context, insertedElement){
 				var media = $('video, audio', context)
 					.add(insertedElement.filter('video, audio'))

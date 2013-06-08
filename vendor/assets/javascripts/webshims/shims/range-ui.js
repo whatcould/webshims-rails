@@ -401,16 +401,20 @@
 			this.thumb.on({
 				mousedown: add
 			});
-			$(function(){
-				webshims.ready('dom-support', function(){
-					that.element.onWSOff('updateshadowdom', function(){
-						that.updateMetrics();
+			if (window.webshims) {
+				webshims.ready('WINDOWLOAD', function(){
+					webshims.ready('dom-support', function(){
+						if ($.fn.onWSOff) {
+							that.element.onWSOff('updateshadowdom', function(){
+								that.updateMetrics();
+							});
+						}
 					});
+					if (!$.fn.onWSOff && webshims._polyfill) {
+						webshims._polyfill(['dom-support']);
+					}
 				});
-				if(!$.fn.onWSOff){
-					webshims._polyfill(['dom-support']);
-				}
-			});
+			}
 		},
 		posCenter: function(elem, outerWidth){
 			var temp;
@@ -452,6 +456,12 @@
 		}
 	};
 	
+	var oCreate = function (o) {
+		function F() {}
+		F.prototype = o;
+		return new F();
+	};
+	
 	$.fn.rangeUI = function(opts){
 		opts = $.extend({
 			readonly: false, 
@@ -470,12 +480,17 @@
 			calcTrail: true
 		}, opts);
 		return this.each(function(){
-			webshims.objectCreate(rangeProto, {
-				element: {
-					value: $(this)
-				}
-			}, opts);
+			var obj = $.extend(oCreate(rangeProto), {element: $(this)});
+			obj.options = opts;
+			obj._create.call(obj);
 		});
 	};
-	webshims.isReady('range-ui', true);
+	if(window.webshims && webshims.isReady){
+		webshims.ready('es5', function(){
+			webshims.isReady('range-ui', true);
+		});
+		if(webshims._polyfill){
+			 webshims._polyfill(['es5']);
+		}
+	}
 })(jQuery);

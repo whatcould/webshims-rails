@@ -50,8 +50,15 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 			validityMessages.en.rangeOverflow[type] = validityMessages.en.rangeOverflow[type] || 'Value must be at or before {%max}.';
 		});
 	}
-	
-	validityMessages['en-US'] = validityMessages['en-US'] || validityMessages.en;
+	if(!validityMessages['en-US']){
+		validityMessages['en-US'] = $.extend(true, {}, validityMessages.en);
+	}
+	if(!validityMessages['en-GB']){
+		validityMessages['en-GB'] = $.extend(true, {}, validityMessages.en);
+	}
+	if(!validityMessages['en-AU']){
+		validityMessages['en-AU'] = $.extend(true, {}, validityMessages.en);
+	}
 	validityMessages[''] = validityMessages[''] || validityMessages['en-US'];
 	
 	validityMessages.de = $.extend(true, {
@@ -151,10 +158,20 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 	
 	webshims.activeLang({
 		langObj: validityMessages, 
-		module: 'form-core', 
+		module: 'form-core',
 		callback: function(langObj){
-			
 			currentValidationMessage = langObj;
+		}
+	});
+	webshims.activeLang({
+		register: 'form-core',
+		callback: function(val){
+			$.each(validityMessages, function(i, val){
+				if(validityMessages[val]){
+					currentValidationMessage = validityMessages[val];
+					return false;
+				}
+			});
 		}
 	});
 	

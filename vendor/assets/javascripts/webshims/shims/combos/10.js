@@ -11,10 +11,15 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	if(!$.parseHTML){
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
+	
+	if(webshims.cfg.extendNative == 1){
+		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
+	}
+	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
-				webshims.error("jQuery was included more than once. Make sure to include it only once! Webshims and other Plugins might not work properly.");
+				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly..");
 				if (window.$) {
 					window.$ = webshims.$;
 				}
@@ -32,7 +37,10 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		};
 		switch$();
 		setTimeout(switch$, 90);
+		webshims.ready('DOM', switch$);
 		$(switch$);
+		webshims.ready('WINDOWLOAD', switch$);
+		
 	}
 //	(function(){
 //		var hostNames = {
@@ -140,6 +148,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				$(evtDel).off(evt, fn);
 			}
 		});
+		return this;
 	};
 	
 	var dataID = '_webshimsLib'+ (Math.round(Math.random() * 1000));
@@ -173,57 +182,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			return this.pushStack(elems);
 		};
 	});
-	
-	if($.Tween.propHooks._default && $.css){
-		(function(){
-			var isjQ8 = false;
-			try {
-				isjQ8 = $.css($('<b style="width: 10px" />')[0], 'width', '') == '10px';
-			} catch(er){
-				webshims.error(er);
-			}
-			var css = isjQ8 ? 
-				function(elem, prop){
-					return $.css( elem, prop, false, "" );
-				} :
-				function(elem, prop){
-					return $.css( elem, prop, "" );
-				}
-			;
-				
-			$.extend($.Tween.propHooks._default, {
-				get: function( tween ) {
-					var result;
-					
-					if ( (tween.elem[ tween.prop ] != null || havePolyfill[ tween.prop ]) &&
-						(!tween.elem.style || tween.elem.style[ tween.prop ] == null) ) {
-						return havePolyfill[ tween.prop ] ? $.prop(tween.elem, tween.prop) : tween.elem[ tween.prop ];
-					}
-		
-					// passing an empty string as a 3rd parameter to .css will automatically
-					// attempt a parseFloat and fallback to a string if the parse fails
-					// so, simple values such as "10px" are parsed to Float.
-					// complex values such as "rotate(1rad)" are returned as is.
-					result = css( tween.elem, tween.prop );
-					// Empty strings, null, undefined and "auto" are converted to 0.
-					return !result || result === "auto" ? 0 : result;
-				},
-				set: function( tween ) {
-					// use step hook for back compat - use cssHook if its there - use .style if its
-					// available and use plain properties where available
-					if ( jQuery.fx.step[ tween.prop ] ) {
-						jQuery.fx.step[ tween.prop ]( tween );
-					} else if ( tween.elem.style && ( tween.elem.style[ jQuery.cssProps[ tween.prop ] ] != null || jQuery.cssHooks[ tween.prop ] ) ) {
-						jQuery.style( tween.elem, tween.prop, tween.now + tween.unit );
-					} else if( !havePolyfill[ tween.prop ] ) {
-						tween.elem[ tween.prop ] = tween.now;
-					} else {
-						$.prop(tween.elem, tween.prop, tween.now);
-					}
-				}
-			});
-		})();
-	}
 	
 	
 	['removeAttr', 'prop', 'attr'].forEach(function(type){
@@ -628,48 +586,50 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				});
 			};
 			return function(nativeElem, shadowElem, opts){
-				opts = opts || {};
-				if(nativeElem.jquery){
-					nativeElem = nativeElem[0];
-				}
-				if(shadowElem.jquery){
-					shadowElem = shadowElem[0];
-				}
-				var nativeData = $.data(nativeElem, dataID) || $.data(nativeElem, dataID, {});
-				var shadowData = $.data(shadowElem, dataID) || $.data(shadowElem, dataID, {});
-				var shadowFocusElementData = {};
-				if(!opts.shadowFocusElement){
-					opts.shadowFocusElement = shadowElem;
-				} else if(opts.shadowFocusElement){
-					if(opts.shadowFocusElement.jquery){
-						opts.shadowFocusElement = opts.shadowFocusElement[0];
+				if(nativeElem && shadowElem){
+					opts = opts || {};
+					if(nativeElem.jquery){
+						nativeElem = nativeElem[0];
 					}
-					shadowFocusElementData = $.data(opts.shadowFocusElement, dataID) || $.data(opts.shadowFocusElement, dataID, shadowFocusElementData);
-				}
-				
-				$(nativeElem).on('remove', function(e){
-					if (!e.originalEvent) {
-						$(shadowElem).remove();
+					if(shadowElem.jquery){
+						shadowElem = shadowElem[0];
 					}
-				});
-				
-				nativeData.hasShadow = shadowElem;
-				shadowFocusElementData.nativeElement = shadowData.nativeElement = nativeElem;
-				shadowFocusElementData.shadowData = shadowData.shadowData = nativeData.shadowData = {
-					nativeElement: nativeElem,
-					shadowElement: shadowElem,
-					shadowFocusElement: opts.shadowFocusElement
-				};
-				if(opts.shadowChilds){
-					opts.shadowChilds.each(function(){
-						elementData(this, 'shadowData', shadowData.shadowData);
+					var nativeData = $.data(nativeElem, dataID) || $.data(nativeElem, dataID, {});
+					var shadowData = $.data(shadowElem, dataID) || $.data(shadowElem, dataID, {});
+					var shadowFocusElementData = {};
+					if(!opts.shadowFocusElement){
+						opts.shadowFocusElement = shadowElem;
+					} else if(opts.shadowFocusElement){
+						if(opts.shadowFocusElement.jquery){
+							opts.shadowFocusElement = opts.shadowFocusElement[0];
+						}
+						shadowFocusElementData = $.data(opts.shadowFocusElement, dataID) || $.data(opts.shadowFocusElement, dataID, shadowFocusElementData);
+					}
+					
+					$(nativeElem).on('remove', function(e){
+						if (!e.originalEvent) {
+							$(shadowElem).remove();
+						}
 					});
+					
+					nativeData.hasShadow = shadowElem;
+					shadowFocusElementData.nativeElement = shadowData.nativeElement = nativeElem;
+					shadowFocusElementData.shadowData = shadowData.shadowData = nativeData.shadowData = {
+						nativeElement: nativeElem,
+						shadowElement: shadowElem,
+						shadowFocusElement: opts.shadowFocusElement
+					};
+					if(opts.shadowChilds){
+						opts.shadowChilds.each(function(){
+							elementData(this, 'shadowData', shadowData.shadowData);
+						});
+					}
+					
+					if(opts.data){
+						shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
+					}
+					opts = null;
 				}
-				
-				if(opts.data){
-					shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
-				}
-				opts = null;
 				webshims.docObserve();
 			};
 		})(),
@@ -953,7 +913,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 //				register: moduleName:string,
 //				callback: callback:function
 //			});
-//		get/set including removeLang
+//		get/set including remoteLang
 //			- webshims.activeLang({
 //				module: moduleName:string,
 //				callback: callback:function,
@@ -1531,16 +1491,20 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			this.thumb.on({
 				mousedown: add
 			});
-			$(function(){
-				webshims.ready('dom-support', function(){
-					that.element.onWSOff('updateshadowdom', function(){
-						that.updateMetrics();
+			if (window.webshims) {
+				webshims.ready('WINDOWLOAD', function(){
+					webshims.ready('dom-support', function(){
+						if ($.fn.onWSOff) {
+							that.element.onWSOff('updateshadowdom', function(){
+								that.updateMetrics();
+							});
+						}
 					});
+					if (!$.fn.onWSOff && webshims._polyfill) {
+						webshims._polyfill(['dom-support']);
+					}
 				});
-				if(!$.fn.onWSOff){
-					webshims._polyfill(['dom-support']);
-				}
-			});
+			}
 		},
 		posCenter: function(elem, outerWidth){
 			var temp;
@@ -1582,6 +1546,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	};
 	
+	var oCreate = function (o) {
+		function F() {}
+		F.prototype = o;
+		return new F();
+	};
+	
 	$.fn.rangeUI = function(opts){
 		opts = $.extend({
 			readonly: false, 
@@ -1600,14 +1570,19 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			calcTrail: true
 		}, opts);
 		return this.each(function(){
-			webshims.objectCreate(rangeProto, {
-				element: {
-					value: $(this)
-				}
-			}, opts);
+			var obj = $.extend(oCreate(rangeProto), {element: $(this)});
+			obj.options = opts;
+			obj._create.call(obj);
 		});
 	};
-	webshims.isReady('range-ui', true);
+	if(window.webshims && webshims.isReady){
+		webshims.ready('es5', function(){
+			webshims.isReady('range-ui', true);
+		});
+		if(webshims._polyfill){
+			 webshims._polyfill(['es5']);
+		}
+	}
 })(jQuery);
 webshims.register('form-number-date-ui', function($, webshims, window, document, undefined, options){
 	"use strict";
@@ -1654,10 +1629,14 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			}
 		},
 		month: {
-			_create: function(){
+			_create: function(opts){
+				
 				var obj = {
 					splits: [$('<input type="text" class="yy" inputmode="numeric" size="4" />')[0], $('<input type="text" class="mm ws-spin" />')[0]] 
 				};
+				if(opts.onlyMonthDigits){
+					$(obj.splits[1]).attr({inputmode: 'numeric', size: 2, maxlength: 2});
+				}
 				obj.elements = [obj.splits[0], $('<span class="ws-input-seperator" />')[0], obj.splits[1]];
 				return obj;
 			},
@@ -1677,6 +1656,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		}
 	};
 	
+	var nowDate = new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000 );
 	var steps = {
 		number: {
 			step: 1
@@ -1686,11 +1666,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		},
 		month: {
 			step: 1,
-			start: new Date()
+			start: new Date(nowDate)
 		},
 		date: {
 			step: 1,
-			start: new Date()
+			start: new Date(nowDate)
 		}
 	};
 	var labelWidth = (function(){
@@ -1786,9 +1766,19 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				"showMonthAfterYear": false,
 				"yearSuffix": ""
 			}
-		}, formcfg['en'] || {});
+		}, formcfg.en || {});
+		
 		if(!formcfg['en-US']){
-			formcfg['en-US'] = formcfg['en'];
+			formcfg['en-US'] = $.extend(true, {}, formcfg['en']);
+		}
+		if(!formcfg['en-GB']){
+			formcfg['en-GB'] = $.extend(true, {}, formcfg.en, {
+				date: {firstDay: 1}, 
+				patterns: {d: "dd/mm/yy"}
+			});
+		}
+		if(!formcfg['en-AU']){
+			formcfg['en-AU'] = $.extend(true, {}, formcfg['en-GB']);
 		}
 		if(!formcfg['']){
 			formcfg[''] = formcfg['en-US'];
@@ -1816,20 +1806,35 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				langCfg.colorSigns = '#abcdefABCDEF';
 			}
 		};
+		var triggerLocaleChange = function(){
+			processLangCFG(curCfg);
+			$(document).triggerHandler('wslocalechange');
+		};
 		
-		processLangCFG(curCfg);
+		triggerLocaleChange();
 		
-		$.webshims.activeLang({
-			register: 'form-core', 
+		webshims.activeLang({
+			register: 'form-core',
 			callback: function(){
 				$.each(arguments, function(i, val){
 					if(formcfg[val]){
-						curCfg = formcfg[val];
-						processLangCFG(curCfg);
-						$(document).triggerHandler('wslocalechange');
+						if(formcfg[val] != curCfg){
+							curCfg = formcfg[val];
+							triggerLocaleChange();
+						}
 						return false;
 					}
 				});
+			}
+		});
+		webshims.activeLang({
+			langObj: formcfg, 
+			module: 'form-core',
+			callback: function(val){
+				if(curCfg != val){
+					curCfg = val;
+					triggerLocaleChange();
+				}
 			}
 		});
 	})();
@@ -1870,6 +1875,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					} else if(p[1]){
 						val = curCfg.date.showMonthAfterYear ? p.join(' ') : p[1]+' '+p[0];
 					}
+				} else if(options && options.splitInput){
+					val = [p[0] || '', p[1] || ''];
 				}
 				return val;
 			},
@@ -1908,16 +1915,16 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			time: function(val){
 				return val;
 			},
-			month: function(val, opts){
+			month: function(val, opts, noCorrect){
 				
 				var p = (!opts.splitInput) ? val.trim().split(/[\.\s-\/\\]+/) : val;
 				
 				if(p.length == 2 && p[0] && p[1]){
-					p[0] = curCfg.date.monthkeys[p[0]] || p[0];
-					p[1] = curCfg.date.monthkeys[p[1]] || p[1];
-					if(p[1].length == 2){
+					p[0] = !noCorrect && curCfg.date.monthkeys[p[0]] || p[0];
+					p[1] = !noCorrect && curCfg.date.monthkeys[p[1]] || p[1];
+					if(p[1].length == 2 && p[0].length > 3){
 						val = p[0]+'-'+p[1];
-					} else if(p[0].length == 2){
+					} else if(p[0].length == 2  && p[1].length > 3){
 						val = p[1]+'-'+p[0];
 					} else {
 						val = '';
@@ -1927,7 +1934,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				}
 				return val;
 			},
-			date: function(val, opts){
+			date: function(val, opts, noCorrect){
 				createFormat('d');
 				var i;
 				var obj;
@@ -1938,7 +1945,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					val = val.split(curCfg.dFormat);
 				}
 				
-				return (val.length == 3 && val[0] && val[1] && val[2]) ? 
+				return (val.length == 3 && val[0] && val[1] && val[2] && (!noCorrect || (val[obj.yy].length > 3 && val[obj.mm].length == 2 && val[obj.dd].length == 2))) ? 
 					([addZero(val[obj.yy]), addZero(val[obj.mm]), addZero(val[obj.dd])]).join('-') : 
 					''
 				;
@@ -1996,7 +2003,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			return function(type){
 				var input;
 				if(!types[type]){
-					input = $('<input type="'+type+'" />');
+					input = $('<input type="'+type+'" step="any" />');
 					types[type] = {
 						asNumber: function(val){
 							var type = (typeof val == 'object') ? 'valueAsDate' : 'value';
@@ -2225,6 +2232,22 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 							e.preventDefault();
 						}
 					},
+					input: (this.type == 'color' && this.isValid) ? 
+						$.noop :
+						(function(){
+							var timer;
+							var check = function(){
+								var val = that.parseValue(true);
+								if(val && that.isValid(val)){
+									that.setInput(val);
+								}
+								
+							};
+							return function(){
+								clearTimeout(timer);
+								timer = setTimeout(check, 200);
+							};
+						})(),
 					'input keydown keypress': (function(){
 						var timer;
 						var isStopped = false;
@@ -2242,8 +2265,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 							timer = setTimeout(releaseTab, 300);
 						};
 						var select = function(){
-							this.focus();
-							this.select();
+							var elem = this;
+							setTimeout(function(){
+								elem.focus();
+								elem.select();
+							}, 4);
+							
 							stopTab();
 						};
 						
@@ -2364,8 +2391,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						var localeChange ;
 						if(!o.splitInput){
 							localeChange = function(){
+								
 								if(o.value){
-									that.value(o.value);
+									that.value(o.value, true);
 								}
 		
 								if(placeholderFormat[that.type] && o.placeholder){
@@ -2384,8 +2412,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				
 				initChangeEvents();
 			},
-			value: function(val){
-				if(!this._init || val !== this.options.value){
+			value: function(val, force){
+				if(!this._init || force || val !== this.options.value){
 					this.element.val(this.formatValue(val));
 					this.options.value = val;
 					this._propertyChange('value');
@@ -2397,14 +2425,14 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				this.inputElements.attr({'aria-required': ''+boolVal});
 				this.mirrorValidity();
 			},
-			parseValue: function(){
+			parseValue: function(noCorrect){
 				var value = this.inputElements.map(function(){
 					return $.prop(this, 'value');
 				}).get();
 				if(!this.options.splitInput){
 					value = value[0];
 				}
-				return parseVal[this.type](value, this.options);
+				return parseVal[this.type](value, this.options, noCorrect);
 			},
 			formatValue: function(val, noSplit){
 				return formatVal[this.type](val, noSplit === false ? false : this.options);
@@ -2502,6 +2530,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				this.elemHelper = $('<input type="'+ o.type+'" />');
 				this.asNumber = helper.asNumber;
 				this.asValue = helper.asValue;
+				this.isValid = helper.isValid;
+				
 				
 				wsWidgetProto._create.apply(this, arguments);
 				this._init = false;
@@ -2527,7 +2557,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			createOpts: ['step', 'min', 'max', 'readonly', 'title', 'disabled', 'tabindex', 'placeholder', 'value', 'required'],
 			_addSplitInputs: function(){
 				if(!this.inputElements){
-					var create = splitInputs[this.type]._create();
+					var create = splitInputs[this.type]._create(this.options);
 					this.splits = create.splits;
 					this.inputElements = $(create.elements).prependTo(this.element).filter('input');
 				}
@@ -2564,9 +2594,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					}, 9);
 				}
 			},
-			value: function(val){
+			value: function(val, force){
 				
-				if(!this._init || this.options.value !== val){
+				if(!this._init || force || this.options.value !== val){
 					this.valueAsNumber = this.asNumber(val);
 					this.options.value = val;
 					
@@ -3078,7 +3108,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						opts[optsName] = $.attr(this, copyAttrs[i]) || opts[optsName];
 					}
 				}
-				
+				if(opts.onlyMonthDigits){
+					opts.formatMonthNames = 'monthDigits';
+				}
 				data.shim = inputTypes[type]._create(opts);
 				
 				webshims.addShadowDom(this, data.shim.element, {

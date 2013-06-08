@@ -44,6 +44,21 @@ article, aside, canvas, details, figcaption, figure, footer, header, hgroup, mai
 	display: block;
 }
 
+dialog {
+	display: none;
+	postion: absolute;
+	left: 0;
+	right: 0;
+	border: solid;
+	background: #fff;
+	color: #000;
+	padding: 1em;
+	
+	&[open] {
+		display: block;
+	}
+}
+
 audio {
 	display: none;
 	height: 0;
@@ -640,8 +655,7 @@ input[type="color"] {
 	min-width: 90px;
 	transition: visibility 400ms ease-in-out;
 	
-	.no-csstransitions &,
-	.no-opacity & {
+	&.no-transition	{
 		display: none;
 	}
 
@@ -770,14 +784,14 @@ $button-bgcolor: #f5f5f5;
 	outline: none;
 	text-align: center;
 	font-family: sans-serif;
-	width: 300px;
+	width: 330px;
 	
 	&.ws-size-2 {
-		width: 538px;
+		width: 645px;
 	}
 	
 	&.ws-size-3 {
-		width: 796px;
+		width: 960px;
 	}
 	
 	&.color-popover {
@@ -936,10 +950,10 @@ $button-bgcolor: #f5f5f5;
 		@extend %clearfix;
 		position: relative;
 		zoom: 1;
-		width: 238px;
+		width: 290px;
 		float: left;
 		margin: 0 10px;
-		
+		background: #fff;
 		
 		tr {
 			border: 0;

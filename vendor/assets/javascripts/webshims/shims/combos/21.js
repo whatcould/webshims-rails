@@ -324,6 +324,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	var hasNative = Modernizr.audio && Modernizr.video;
 	var hasFlash = swfmini.hasFlashPlayerVersion('9.0.115');
 	var loadedSwf = 0;
+	var needsLoadPreload = 'ActiveXObject' in window && hasNative;
 	var getProps = {
 		paused: true,
 		ended: false,
@@ -437,12 +438,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		data.readyState = readyState;
 	};
 	
-	$.extend($.event.customEvent, {
-		updatemediaelementdimensions: true,
-		flashblocker: true,
-		swfstageresize: true,
-		mediaelementapichange: true
-	});
+	
 	
 	mediaelement.jarisEvent = {};
 	var localConnectionTimer;
@@ -691,8 +687,13 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			var isNativeHTML5 = ( event.originalEvent && event.originalEvent.type === event.type );
 			if( isNativeHTML5 == (data.activating == 'third') ){
 				event.stopImmediatePropagation();
-				if(stopEvents[event.type] && data.isActive != data.activating){
-					$(event.target).pause();
+				
+				if(stopEvents[event.type]){
+					if(data.isActive != data.activating){
+						$(event.target).pause();
+					} else if(isNativeHTML5){
+						($.prop(event.target, 'pause')._supvalue || $.noop).apply(event.target);
+					}
 				}
 			}
 		};
@@ -756,15 +757,18 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	})();
 	
 	var setElementDimension = function(data, hasControls){
+		var cAttr;
 		var elem = data._elem;
 		var box = data.shadowElem;
+		
 		$(elem)[hasControls ? 'addClass' : 'removeClass']('webshims-controls');
 		if(data._elemNodeName == 'audio' && !hasControls){
 			box.css({width: 0, height: 0});
 		} else {
+			
 			box.css({
-				width: elem.style.width || $(elem).width(),
-				height: elem.style.height || $(elem).height()
+				width: elem.style.width || ((cAttr = $(elem).attr('width')) && cAttr+'px') || $(elem).width(),
+				height: elem.style.height|| ((cAttr = $(elem).attr('height')) && cAttr+'px') || $(elem).height()
 			});
 		}
 	};
@@ -793,7 +797,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	replaceVar = function(val){
 		return (val.replace) ? val.replace(regs.A, '%26').replace(regs.a, '%26').replace(regs.e, '%3D').replace(regs.q, '%3F') : val;
 	};
-	
+
 	mediaelement.createSWF = function( elem, canPlaySrc, data ){
 		if(!hasFlash){
 			setTimeout(function(){
@@ -801,7 +805,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			}, 1);
 			return;
 		}
-		
+
 		if(loadedSwf < 1){
 			loadedSwf = 1;
 		} else {
@@ -812,7 +816,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		}
 		
 		if($.attr(elem, 'height') || $.attr(elem, 'width')){
-			webshims.warn("width or height content attributes used. Webshims only uses CSS (computed styles or inline styles) to detect size of a video/audio");
+			webshims.warn("width or height content attributes used. Webshims prefers the usage of CSS (computed styles or inline styles) to detect size of a video/audio. It's really more powerfull.");
 		}
 		
 		var isRtmp = canPlaySrc.type == 'audio/rtmp' || canPlaySrc.type == 'video/rtmp';
@@ -909,6 +913,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 					}
 				}
 			}));
+			
 			setElementDimension(data, hasControls);
 		
 			box.insertBefore(elem);
@@ -918,16 +923,31 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			}
 			
 			webshims.addShadowDom(elem, box);
+			if(!webshims.data(elem, 'mediaelement')){
+				webshims.data(elem, 'mediaelement', data);
+			}
 			addMediaToStopEvents(elem);
+			
 			mediaelement.setActive(elem, 'third', data);
+			
 			$(elem)
 				.on({'updatemediaelementdimensions': setDimension})
 				.onWSOff('updateshadowdom', setDimension)
+				.on('remove', function(e){
+					if(!e.originalEvent && mediaelement.jarisEvent[data.id] && mediaelement.jarisEvent[data.id].elem == elem){
+						delete mediaelement.jarisEvent[data.id];
+						clearTimeout(localConnectionTimer);
+						clearTimeout(data.flashBlock);
+					}
+					box.remove();
+				})
 			;
 		}
 		
-		if(!mediaelement.jarisEvent[data.id]){
+		
+		if(!mediaelement.jarisEvent[data.id] || mediaelement.jarisEvent[data.id].elem != elem){
 			mediaelement.jarisEvent[data.id] = function(jaris){
+				
 				if(jaris.type == 'ready'){
 					var onReady = function(){
 						if(data.api){
@@ -960,8 +980,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 					}
 					data.duration = jaris.duration;
 				}
-				
 			};
+			mediaelement.jarisEvent[data.id].elem = elem;
 		}
 		
 		$.extend(vars, 
@@ -987,27 +1007,27 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		clearTimeout(data.flashBlock);
 		
 		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.115", false, vars, params, attrs, function(swfData){
-			
 			if(swfData.success){
-				
-				data.api = swfData.ref;
-				
-				if(!hasControls){
-					$(swfData.ref).attr('tabindex', '-1').css('outline', 'none');
-				}
-				
-				data.flashBlock = setTimeout(function(){
+				var fBlocker = function(){
 					if((!swfData.ref.parentNode && box[0].parentNode) || swfData.ref.style.display == "none"){
 						box.addClass('flashblocker-assumed');
 						$(elem).trigger('flashblocker');
 						webshims.warn("flashblocker assumed");
 					}
 					$(swfData.ref).css({'minHeight': '2px', 'minWidth': '2px', display: 'block'});
-				}, 9);
+				};
+				data.api = swfData.ref;
+				
+				if(!hasControls){
+					$(swfData.ref).attr('tabindex', '-1').css('outline', 'none');
+				}
+				
+				data.flashBlock = setTimeout(fBlocker, 99);
 				
 				if(!localConnectionTimer){
 					clearTimeout(localConnectionTimer);
 					localConnectionTimer = setTimeout(function(){
+						fBlocker();
 						var flash = $(swfData.ref);
 						if(flash[0].offsetWidth > 1 && flash[0].offsetHeight > 1 && location.protocol.indexOf('file:') === 0){
 							webshims.error("Add your local development-directory to the local-trusted security sandbox:  http://www.macromedia.com/support/documentation/en/flashplayer/help/settings_manager04.html");
@@ -1161,12 +1181,23 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			}
 		});
 		
+		
 		webshims.onNodeNamesPropertyModify(nodeName, 'preload', function(val){
-			var data = getSwfDataFromElem(this);
+			var data, baseData, elem;
 			
 			
-			if(data && bufferSrc(this)){
-				queueSwfMethod(this, 'api_preload', [], data);
+			if(bufferSrc(this)){
+				data = getSwfDataFromElem(this);
+				if(data){
+					queueSwfMethod(this, 'api_preload', [], data);
+				} else if(needsLoadPreload && this.paused && !this.error && !$.data(this, 'mediaerror') && !this.readyState && !this.networkState && !this.autoplay && $(this).is(':not(.nonnative-api-active)')){
+					elem = this;
+					baseData = webshims.data(elem, 'mediaelementBase') || webshims.data(elem, 'mediaelementBase', {});
+					clearTimeout(baseData.loadTimer);
+					baseData.loadTimer = setTimeout(function(){
+						$(elem).mediaLoad();
+					}, 9);
+				}
 			}
 		});
 		

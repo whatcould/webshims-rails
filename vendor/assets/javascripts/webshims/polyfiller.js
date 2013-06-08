@@ -30,12 +30,12 @@
 	}
 	
 	var webshims = {
-		version: '1.10.6',
+		version: '1.10.9',
 		cfg: {
 			useImportantStyles: true,
 			//addCacheBuster: false,
 			waitReady: true,
-			extendNative: true,
+			extendNative: 1,
 			loadStyles: true,
 			disableShivMethods: true,
 			wspopover: {appendTo: 'body', hideOnBlur: true},
@@ -513,7 +513,7 @@
 					};
 					
 					loadedSrcs.push(src);
-					if(window.require){
+					if(window.require && window.define && window.define.amd){
 						require([src], complete);
 					} else if (window.sssl) {
 						sssl(src, complete);
@@ -939,6 +939,7 @@
 	//<forms
 	(function(){
 		var formExtend, formOptions, formExtras;
+		var fShim = 'form-shim-extend';
 		var modernizrInputAttrs = Modernizr.input;
 		var modernizrInputTypes = Modernizr.inputtypes;
 		var formvalidation = 'formvalidation';
@@ -967,7 +968,7 @@
 					bugs.bustedValidity = bustedValidity = !modernizrInputAttrs.list || window.opera || Modernizr.formattribute === false || !Modernizr.fieldsetdisabled || !('value' in document.createElement('progress')) || !('value' in document.createElement('output')) || !($('<input type="date" value="1488-12-11" />')[0].validity || {valid: true}).valid || !('required' in select) || (select.validity || {}).valid;
 				}
 				
-				formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : 'form-shim-extend';
+				formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : fShim;
 				
 			}
 			initialFormTest.run = true;
@@ -1023,7 +1024,7 @@
 			c: [6, 5]
 		});
 		
-		addPolyfill('form-shim-extend', {
+		addPolyfill(fShim, {
 			f: 'forms',
 			test: function(){
 				return Modernizr[formvalidation] && !bustedValidity;
@@ -1046,7 +1047,7 @@
 			options: formOptions,
 			c: [24]
 		};
-		addModule('form-validation', $.extend({d: ['form-message']}, formExtras));
+		addModule('form-validation', $.extend({d: ['form-message', 'form-core']}, formExtras));
 		
 		addModule('form-validators', $.extend({}, formExtras));
 				
@@ -1069,6 +1070,7 @@
 						return false;
 					}
 				});
+				
 				return ret;
 			},
 			methodNames: ['stepUp', 'stepDown'],
@@ -1090,8 +1092,13 @@
 		addPolyfill('form-number-date-ui', {
 			f: 'forms-ext',
 			test: function(){
+				var o = this.options;
 				initialFormTest();
-				return !this.options.replaceUI && modules[fNuAPI].test();
+				//input widgets on old on old androids can't be trusted
+				if(fShim == formExtend && (/Android/i).test(navigator.userAgent)){
+					o.replaceUI = true;
+				}
+				return !o.replaceUI && modules[fNuAPI].test();
 			},
 			d: ['forms', DOMSUPPORT, fNuAPI, 'range-ui'],
 			options: {

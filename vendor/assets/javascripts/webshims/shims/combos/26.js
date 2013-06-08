@@ -11,10 +11,15 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	if(!$.parseHTML){
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
+	
+	if(webshims.cfg.extendNative == 1){
+		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
+	}
+	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
-				webshims.error("jQuery was included more than once. Make sure to include it only once! Webshims and other Plugins might not work properly.");
+				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly..");
 				if (window.$) {
 					window.$ = webshims.$;
 				}
@@ -32,7 +37,10 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		};
 		switch$();
 		setTimeout(switch$, 90);
+		webshims.ready('DOM', switch$);
 		$(switch$);
+		webshims.ready('WINDOWLOAD', switch$);
+		
 	}
 //	(function(){
 //		var hostNames = {
@@ -140,6 +148,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				$(evtDel).off(evt, fn);
 			}
 		});
+		return this;
 	};
 	
 	var dataID = '_webshimsLib'+ (Math.round(Math.random() * 1000));
@@ -173,57 +182,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			return this.pushStack(elems);
 		};
 	});
-	
-	if($.Tween.propHooks._default && $.css){
-		(function(){
-			var isjQ8 = false;
-			try {
-				isjQ8 = $.css($('<b style="width: 10px" />')[0], 'width', '') == '10px';
-			} catch(er){
-				webshims.error(er);
-			}
-			var css = isjQ8 ? 
-				function(elem, prop){
-					return $.css( elem, prop, false, "" );
-				} :
-				function(elem, prop){
-					return $.css( elem, prop, "" );
-				}
-			;
-				
-			$.extend($.Tween.propHooks._default, {
-				get: function( tween ) {
-					var result;
-					
-					if ( (tween.elem[ tween.prop ] != null || havePolyfill[ tween.prop ]) &&
-						(!tween.elem.style || tween.elem.style[ tween.prop ] == null) ) {
-						return havePolyfill[ tween.prop ] ? $.prop(tween.elem, tween.prop) : tween.elem[ tween.prop ];
-					}
-		
-					// passing an empty string as a 3rd parameter to .css will automatically
-					// attempt a parseFloat and fallback to a string if the parse fails
-					// so, simple values such as "10px" are parsed to Float.
-					// complex values such as "rotate(1rad)" are returned as is.
-					result = css( tween.elem, tween.prop );
-					// Empty strings, null, undefined and "auto" are converted to 0.
-					return !result || result === "auto" ? 0 : result;
-				},
-				set: function( tween ) {
-					// use step hook for back compat - use cssHook if its there - use .style if its
-					// available and use plain properties where available
-					if ( jQuery.fx.step[ tween.prop ] ) {
-						jQuery.fx.step[ tween.prop ]( tween );
-					} else if ( tween.elem.style && ( tween.elem.style[ jQuery.cssProps[ tween.prop ] ] != null || jQuery.cssHooks[ tween.prop ] ) ) {
-						jQuery.style( tween.elem, tween.prop, tween.now + tween.unit );
-					} else if( !havePolyfill[ tween.prop ] ) {
-						tween.elem[ tween.prop ] = tween.now;
-					} else {
-						$.prop(tween.elem, tween.prop, tween.now);
-					}
-				}
-			});
-		})();
-	}
 	
 	
 	['removeAttr', 'prop', 'attr'].forEach(function(type){
@@ -628,48 +586,50 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				});
 			};
 			return function(nativeElem, shadowElem, opts){
-				opts = opts || {};
-				if(nativeElem.jquery){
-					nativeElem = nativeElem[0];
-				}
-				if(shadowElem.jquery){
-					shadowElem = shadowElem[0];
-				}
-				var nativeData = $.data(nativeElem, dataID) || $.data(nativeElem, dataID, {});
-				var shadowData = $.data(shadowElem, dataID) || $.data(shadowElem, dataID, {});
-				var shadowFocusElementData = {};
-				if(!opts.shadowFocusElement){
-					opts.shadowFocusElement = shadowElem;
-				} else if(opts.shadowFocusElement){
-					if(opts.shadowFocusElement.jquery){
-						opts.shadowFocusElement = opts.shadowFocusElement[0];
+				if(nativeElem && shadowElem){
+					opts = opts || {};
+					if(nativeElem.jquery){
+						nativeElem = nativeElem[0];
 					}
-					shadowFocusElementData = $.data(opts.shadowFocusElement, dataID) || $.data(opts.shadowFocusElement, dataID, shadowFocusElementData);
-				}
-				
-				$(nativeElem).on('remove', function(e){
-					if (!e.originalEvent) {
-						$(shadowElem).remove();
+					if(shadowElem.jquery){
+						shadowElem = shadowElem[0];
 					}
-				});
-				
-				nativeData.hasShadow = shadowElem;
-				shadowFocusElementData.nativeElement = shadowData.nativeElement = nativeElem;
-				shadowFocusElementData.shadowData = shadowData.shadowData = nativeData.shadowData = {
-					nativeElement: nativeElem,
-					shadowElement: shadowElem,
-					shadowFocusElement: opts.shadowFocusElement
-				};
-				if(opts.shadowChilds){
-					opts.shadowChilds.each(function(){
-						elementData(this, 'shadowData', shadowData.shadowData);
+					var nativeData = $.data(nativeElem, dataID) || $.data(nativeElem, dataID, {});
+					var shadowData = $.data(shadowElem, dataID) || $.data(shadowElem, dataID, {});
+					var shadowFocusElementData = {};
+					if(!opts.shadowFocusElement){
+						opts.shadowFocusElement = shadowElem;
+					} else if(opts.shadowFocusElement){
+						if(opts.shadowFocusElement.jquery){
+							opts.shadowFocusElement = opts.shadowFocusElement[0];
+						}
+						shadowFocusElementData = $.data(opts.shadowFocusElement, dataID) || $.data(opts.shadowFocusElement, dataID, shadowFocusElementData);
+					}
+					
+					$(nativeElem).on('remove', function(e){
+						if (!e.originalEvent) {
+							$(shadowElem).remove();
+						}
 					});
+					
+					nativeData.hasShadow = shadowElem;
+					shadowFocusElementData.nativeElement = shadowData.nativeElement = nativeElem;
+					shadowFocusElementData.shadowData = shadowData.shadowData = nativeData.shadowData = {
+						nativeElement: nativeElem,
+						shadowElement: shadowElem,
+						shadowFocusElement: opts.shadowFocusElement
+					};
+					if(opts.shadowChilds){
+						opts.shadowChilds.each(function(){
+							elementData(this, 'shadowData', shadowData.shadowData);
+						});
+					}
+					
+					if(opts.data){
+						shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
+					}
+					opts = null;
 				}
-				
-				if(opts.data){
-					shadowFocusElementData.shadowData.data = shadowData.shadowData.data = nativeData.shadowData.data = opts.data;
-				}
-				opts = null;
 				webshims.docObserve();
 			};
 		})(),
@@ -953,7 +913,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 //				register: moduleName:string,
 //				callback: callback:function
 //			});
-//		get/set including removeLang
+//		get/set including remoteLang
 //			- webshims.activeLang({
 //				module: moduleName:string,
 //				callback: callback:function,

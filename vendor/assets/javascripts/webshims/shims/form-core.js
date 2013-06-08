@@ -75,12 +75,13 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		$.expr[":"][name] = $.expr.filters[name+"-element"];
 	});
 	
-	
-	$.expr[":"].focus = function( elem ) {
+	var pseudoFocus = $.expr[":"].focus;
+	$.expr[":"].focus = function(){
 		try {
-			var doc = elem.ownerDocument;
-			return elem === doc.activeElement && (!doc.hasFocus || doc.hasFocus());
-		} catch(e){}
+			return pseudoFocus.apply(this, arguments);
+		} catch(e){
+			webshims.error(e);
+		}
 		return false;
 	};
 	
@@ -95,7 +96,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		});
 	};
 	
-	
+	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
 	webshims.wsPopover = {
 		id: 0,
 		_create: function(){
@@ -103,7 +104,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			this.id = webshims.wsPopover.id++;
 			this.eventns = '.wsoverlay' + this.id;
 			this.timers = {};
-			this.element = $('<div class="ws-popover" tabindex="-1"><div class="ws-po-outerbox"><div class="ws-po-arrow"><div class="ws-po-arrowbox" /></div><div class="ws-po-box" /></div></div>');
+			this.element = $('<div class="ws-popover'+transClass+'" tabindex="-1"><div class="ws-po-outerbox"><div class="ws-po-arrow"><div class="ws-po-arrowbox" /></div><div class="ws-po-box" /></div></div>');
 			this.contentElement = $('.ws-po-box', this.element);
 			this.lastElement = $([]);
 			this.bindElement();
@@ -141,6 +142,57 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 	};
 	
+	
+	webshims.getContentValidationMessage = function(elem, validity, key){
+		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
+		if(key && message[key]){
+			message = message[key];
+		}
+		if(typeof message == 'object'){
+			validity = validity || $.prop(elem, 'validity') || {valid: 1};
+			if(!validity.valid){
+				$.each(validity, function(name, prop){
+					if(prop && name != 'valid' && message[name]){
+						message = message[name];
+						return false;
+					}
+				});
+			}
+		}
+		
+		if(typeof message == 'object'){
+			message = message.defaultMessage;
+		}
+		return message || '';
+	};
+	
+	$.fn.getErrorMessage = function(key){
+		var message = '';
+		var elem = this[0];
+		if(elem){
+			message = webshims.getContentValidationMessage(elem, false, key) || $.prop(elem, 'customValidationMessage') || $.prop(elem, 'validationMessage');
+		}
+		return message;
+	};
+	
+	
+	$(document).on('focusin.lazyloadvalidation', function(e){
+		if('form' in e.target && $(e.target).is(':invalid')){
+			lazyLoad();
+		}
+	});
+	webshims.ready('WINDOWLOAD', lazyLoad);
+	
+	if(options.replaceValidationUI){
+		webshims.ready('DOM forms', function(){
+			$(document).on('firstinvalid', function(e){
+				if(!e.isInvalidUIPrevented()){
+					e.preventDefault();
+					webshims.validityAlert.showFor( e.target ); 
+				}
+			});
+		});
+	}
 	
 	/* extension, but also used to fix native implementation workaround/bugfixes */
 	(function(){
@@ -181,63 +233,4 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			jElm = null;
 		});
 	})();
-	
-	
-	webshims.getContentValidationMessage = function(elem, validity, key){
-		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
-		if(key && message[key]){
-			message = message[key];
-		}
-		if(typeof message == 'object'){
-			validity = validity || $.prop(elem, 'validity') || {valid: 1};
-			if(!validity.valid){
-				$.each(validity, function(name, prop){
-					if(prop && name != 'valid' && message[name]){
-						message = message[name];
-						return false;
-					}
-				});
-			}
-		}
-		
-		if(typeof message == 'object'){
-			message = message.defaultMessage;
-		}
-		return message || '';
-	};
-	
-	$.fn.getErrorMessage = function(key){
-		var message = '';
-		var elem = this[0];
-		if(elem){
-			message = webshims.getContentValidationMessage(elem, false, key) || $.prop(elem, 'customValidationMessage') || $.prop(elem, 'validationMessage');
-		}
-		return message;
-	};
-	
-	
-	webshims.ready('forms', function(){
-		$(document).on('focusin.lazyloadvalidation', function(e){
-			if('form' in e.target && $(e.target).is(':invalid')){
-				lazyLoad();
-			}
-		});
-	});
-	webshims.ready('WINDOWLOAD', lazyLoad);
-	if(options.overrideMessages){
-		options.customMessages = true;
-		webshims.reTest('form-message');
-		webshims.error('overrideMessages is deprecated. use customMessages instead.');
-	}
-	if(options.replaceValidationUI){
-		webshims.ready('DOM forms', function(){
-			$(document).on('firstinvalid', function(e){
-				if(!e.isInvalidUIPrevented()){
-					e.preventDefault();
-					webshims.validityAlert.showFor( e.target ); 
-				}
-			});
-		});
-	}
 });
-
