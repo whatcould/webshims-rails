@@ -12,14 +12,14 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative == 1){
+	if(webshims.cfg.extendNative === 1){
 		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
-				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly..");
+				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly. Or set webshims.cfg.no$Switch to 'true'.");
 				if (window.$) {
 					window.$ = webshims.$;
 				}
@@ -561,6 +561,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						setInterval(this.test, 600);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
+						$(document).on('updatelayout', this.handler);
 						$(window).bind('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -608,7 +609,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					
 					$(nativeElem).on('remove', function(e){
 						if (!e.originalEvent) {
-							$(shadowElem).remove();
+							setTimeout(function(){
+								$(shadowElem).remove();
+							}, 4);
 						}
 					});
 					
@@ -1086,7 +1089,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(jQuery, document);
+})(webshims.$, document);
 
 webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
@@ -1165,6 +1168,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		$.expr[":"][name] = $.expr.filters[name+"-element"];
 	});
 	
+	//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used) 
 	var pseudoFocus = $.expr[":"].focus;
 	$.expr[":"].focus = function(){
 		try {
@@ -1187,10 +1191,18 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 	
 	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
+	var poCFG = webshims.cfg.wspopover;
+	if(!poCFG.position && poCFG.position !== false){
+		poCFG.position = {
+			at: 'left bottom',
+			my: 'left top',
+			collision: 'fit flip'
+		};
+	}
 	webshims.wsPopover = {
 		id: 0,
 		_create: function(){
-			this.options = $.extend({}, webshims.cfg.wspopover, this.options);
+			this.options = $.extend(true, {}, poCFG, this.options);
 			this.id = webshims.wsPopover.id++;
 			this.eventns = '.wsoverlay' + this.id;
 			this.timers = {};
@@ -1237,6 +1249,11 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
+		} else if(message) {
+			validity = validity || $.prop(elem, 'validity') || {valid: 1};
+			if(validity.valid){
+				message = '';
+			}
 		}
 		if(typeof message == 'object'){
 			validity = validity || $.prop(elem, 'validity') || {valid: 1};
@@ -1584,8 +1601,16 @@ $(window).on('invalid', $.noop);
 webshims.addInputType('email', {
 	mismatch: (function(){
 		//taken from http://www.whatwg.org/specs/web-apps/current-work/multipage/states-of-the-type-attribute.html#valid-e-mail-address
-		var test = cfg.emailReg || /^[a-zA-Z0-9.!#$%&'*+-\/=?\^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/;
+		var test = cfg.emailReg || /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 		return function(val){
+			// optional punycode support: https://github.com/bestiejs/punycode.js
+			if(window.punycode && punycode.toASCII){
+				try {
+					if( test.test(punycode.toASCII(val)) ){
+						return false;
+					}
+				} catch(er){}
+			}
 			return !test.test(val);
 		};
 	})()
@@ -3091,10 +3116,7 @@ try {
 					});
 				}
 			;
-			if($.event.customEvent){
-				$.event.customEvent.updateInput = true;
-			} 
-			
+						
 			$(doc)
 				.on('focusin', function(e){
 					if( e.target && !e.target.readOnly && !e.target.disabled && (e.target.nodeName || '').toLowerCase() == 'input' && !noInputTypes[e.target.type] && !(webshims.data(e.target, 'implemented') || {}).inputwidgets){
@@ -3286,6 +3308,10 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 	});
 	
 	implementProperties.forEach(function(messageProp){
+		var skipNames = {
+			valid: 1,
+			badInput: 1
+		};
 		webshims.defineNodeNamesProperty(['fieldset', 'output', 'button'], messageProp, {
 			prop: {
 				value: '',
@@ -3314,13 +3340,16 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 							if(message){return message;}
 						}
 						$.each(validity, function(name, prop){
-							if(name == 'valid' || !prop){return;}
+							if(skipNames[name] || !prop){return;}
 							
 							message = webshims.createValidationMessage(elem, name);
 							if(message){
 								return false;
 							}
 						});
+						if(!message && validity.badInput){
+							message = webshims.createValidationMessage(elem, 'typeMismatch') || webshims.createValidationMessage(elem, 'valueMissing');
+						}
 						return message || '';
 					},
 					writeable: false

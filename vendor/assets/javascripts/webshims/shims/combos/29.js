@@ -848,7 +848,7 @@ modified for webshims
 			detectTrackError();
 		}
 	}
-})(jQuery)
+})(webshims.$)
 webshims.register('track-ui', function($, webshims, window, document, undefined){
 	"use strict";
 	var options = webshims.cfg.track;
@@ -961,10 +961,6 @@ webshims.register('track-ui', function($, webshims, window, document, undefined)
 		return ret;
 	}
 	
-	$.extend($.event.customEvent, {
-		updatetrackdisplay: true,
-		forceupdatetrackdisplay: true
-	});
 	
 	mediaelement.trackDisplay = trackDisplay;
 	
@@ -1132,7 +1128,9 @@ webshims.register('track-ui', function($, webshims, window, document, undefined)
 				
 				elem.on('remove', function(e){
 					if(!e.originalEvent && baseData && baseData.trackDisplay){
-						baseData.trackDisplay.remove();
+						setTimeout(function(){
+							baseData.trackDisplay.remove();
+						}, 4);
 					}
 				});
 				

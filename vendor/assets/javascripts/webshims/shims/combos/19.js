@@ -8,7 +8,7 @@ var swfmini = function() {
 	
 	var UNDEF = "undefined",
 		OBJECT = "object",
-		webshims = jQuery.webshims || window.webshims,
+		webshims = window.webshims,
 		SHOCKWAVE_FLASH = "Shockwave Flash",
 		SHOCKWAVE_FLASH_AX = "ShockwaveFlash.ShockwaveFlash",
 		FLASH_MIME_TYPE = "application/x-shockwave-flash",
@@ -1205,11 +1205,11 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		}
 		
 		if(opts){
-			o.options = jQuery.extend(true, {}, o.options || {}, opts);
+			o.options = $.extend(true, {}, o.options || {}, opts);
 			opts = o.options;
 		}
 		
-		if(o._create && jQuery.isFunction(o._create)){
+		if(o._create && $.isFunction(o._create)){
 			o._create(opts);
 		}
 		return o;
@@ -1295,7 +1295,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
     };
 
 }
-})(jQuery, jQuery.webshims);
+})(webshims.$, webshims);
 
 
 
@@ -1313,14 +1313,14 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative == 1){
+	if(webshims.cfg.extendNative === 1){
 		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
-				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly..");
+				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly. Or set webshims.cfg.no$Switch to 'true'.");
 				if (window.$) {
 					window.$ = webshims.$;
 				}
@@ -1862,6 +1862,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						setInterval(this.test, 600);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
+						$(document).on('updatelayout', this.handler);
 						$(window).bind('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -1909,7 +1910,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					
 					$(nativeElem).on('remove', function(e){
 						if (!e.originalEvent) {
-							$(shadowElem).remove();
+							setTimeout(function(){
+								$(shadowElem).remove();
+							}, 4);
 						}
 					});
 					
@@ -2387,10 +2390,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(jQuery, document);
+})(webshims.$, document);
 
-(function($, Modernizr, webshims){
+(function(Modernizr, webshims){
 	"use strict";
+	var $ = webshims.$;
 	var hasNative = Modernizr.audio && Modernizr.video;
 	var supportsLoop = false;
 	var bugs = webshims.bugs;
@@ -2494,6 +2498,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	hasSwf = swfmini.hasFlashPlayerVersion('9.0.115');
 	$('html').addClass(hasSwf ? 'swf' : 'no-swf');
 	var mediaelement = webshims.mediaelement;
+	
 	mediaelement.parseRtmp = function(data){
 		var src = data.src.split('://');
 		var paths = src[1].split('/');
@@ -2663,7 +2668,6 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			var src = getSrcObj(mediaElem, nodeName);
 			
 			if(!src.src){
-				
 				$('source', mediaElem).each(function(){
 					src = getSrcObj(this, nodeName);
 					if(src.src){srces.push(src);}
@@ -2678,18 +2682,10 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				srces = [srces]; 
 			}
 			srces.forEach(function(src){
-				var source = document.createElement('source');
 				if(typeof src == 'string'){
 					src = {src: src};
 				} 
-				source.setAttribute('src', src.src);
-				if(src.type){
-					source.setAttribute('type', src.type);
-				}
-				if(src.media){
-					source.setAttribute('media', src.media);
-				}
-				mediaElem.append(source);
+				mediaElem.append($(document.createElement('source')).attr(src));
 			});
 			
 		}
@@ -2837,6 +2833,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		
 		if(!_srces.length || !parent || parent.nodeType != 1 || stopParent.test(parent.nodeName || '')){return;}
 		data = data || webshims.data(elem, 'mediaelement');
+		if(mediaelement.sortMedia){
+			_srces.sort(mediaelement.sortMedia);
+		}
 		stepSources(elem, data, options.preferFlash || undefined, _srces);
 	};
 	mediaelement.selectSource = selectSource;
@@ -3011,7 +3010,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	}
 	webshims.ready('track', loadTrackUi);
 });
-})(jQuery, Modernizr, webshims);
+})(Modernizr, webshims);
 webshims.register('mediaelement-jaris', function($, webshims, window, document, undefined, options){
 	"use strict";
 	
@@ -3452,20 +3451,84 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		};
 	})();
 	
+	
+	var transformDimension = (function(){
+		var dimCache = {};
+		var getRealDims = function(data){
+			var ret, poster, img;
+			if(dimCache[data.currentSrc]){
+				ret = dimCache[data.currentSrc];
+			} else if(data.videoHeight && data.videoWidth){
+				dimCache[data.currentSrc] = {
+					width: data.videoWidth,
+					height: data.videoHeight
+				};
+				ret = dimCache[data.currentSrc];
+			} else if((poster = $.attr(data._elem, 'poster'))){
+				ret = dimCache[poster];
+				if(!ret){
+					img = document.createElement('img');
+					img.onload = function(){
+						dimCache[poster] = {
+							width: this.width,
+							height: this.height
+						};
+						
+						if(dimCache[poster].height && dimCache[poster].width){
+							setElementDimension(data, $.prop(data._elem, 'controls'));
+						} else {
+							delete dimCache[poster];
+						}
+					};
+					img.src = poster;
+					if(img.complete){
+						img.onload();
+					}
+				}
+			}
+			return ret || {width: 300, height: data._elemNodeName == 'video' ? 150 : 50};
+		};
+		return function(data){
+			var realDims, ratio;
+			var ret = data.elemDimensions;
+			
+			if(ret.width == 'auto' || ret.height == 'auto'){
+				ret = $.extend({}, data.elemDimensions);
+				realDims = getRealDims(data);
+				ratio = realDims.width / realDims.height;
+				
+				if(ret.width == 'auto' && ret.height == 'auto'){
+					ret = realDims;
+				} else if(ret.width == 'auto'){
+					data.shadowElem.css({height: ret.height});
+					ret.width = data.shadowElem.height() * ratio;
+				} else {
+					data.shadowElem.css({width: ret.width});
+					ret.height = data.shadowElem.width() / ratio;
+				}
+			}
+			return ret;
+		};
+	})();
 	var setElementDimension = function(data, hasControls){
-		var cAttr;
+		var dims;
 		var elem = data._elem;
 		var box = data.shadowElem;
-		
 		$(elem)[hasControls ? 'addClass' : 'removeClass']('webshims-controls');
-		if(data._elemNodeName == 'audio' && !hasControls){
-			box.css({width: 0, height: 0});
-		} else {
-			
-			box.css({
-				width: elem.style.width || ((cAttr = $(elem).attr('width')) && cAttr+'px') || $(elem).width(),
-				height: elem.style.height|| ((cAttr = $(elem).attr('height')) && cAttr+'px') || $(elem).height()
-			});
+
+		if(data.isActive == 'third'){
+			if(data._elemNodeName == 'audio' && !hasControls){
+				box.css({width: 0, height: 0});
+			} else {
+				data.elemDimensions = {
+					width: elem.style.width || $.attr(elem, 'width') || $(elem).width(),
+					height: elem.style.height || $.attr(elem, 'height') || $(elem).height()
+				};
+				dims = transformDimension(data);
+				dims.minWidth = elem.style.minWidth;
+				dims.minHeight = elem.style.minHeight;
+				box.css(dims);
+			}
 		}
 	};
 	
@@ -3493,6 +3556,27 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	replaceVar = function(val){
 		return (val.replace) ? val.replace(regs.A, '%26').replace(regs.a, '%26').replace(regs.e, '%3D').replace(regs.q, '%3F') : val;
 	};
+	
+	if('matchMedia' in window){
+		var allowMediaSorting = false;
+		try {
+			allowMediaSorting = window.matchMedia('only all').matches;
+		} catch(er){}
+		if(allowMediaSorting){
+			mediaelement.sortMedia = function(src1, src2){
+				try {
+					src1 = !src1.media || matchMedia( src1.media ).matches;
+					src2 = !src2.media || matchMedia( src2.media ).matches;
+				} catch(er){
+					return 0;
+				}
+				return src1 == src2 ? 
+					0 :
+					src1 ? -1
+					: 1;
+			};
+		}
+	}
 
 	mediaelement.createSWF = function( elem, canPlaySrc, data ){
 		if(!hasFlash){
@@ -3544,7 +3628,9 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			$(elem).data('attrs')
 		);
 		var setDimension = function(){
-			setElementDimension(data, $.prop(elem, 'controls'));
+			if(data.isActive == 'third'){
+				setElementDimension(data, $.prop(elem, 'controls'));
+			}
 		};
 		
 		var box;
@@ -3610,7 +3696,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 				}
 			}));
 			
-			setElementDimension(data, hasControls);
+			
 		
 			box.insertBefore(elem);
 			
@@ -3626,17 +3712,20 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			
 			mediaelement.setActive(elem, 'third', data);
 			
+			setElementDimension(data, hasControls);
+			
 			$(elem)
-				.on({'updatemediaelementdimensions': setDimension})
-				.onWSOff('updateshadowdom', setDimension)
-				.on('remove', function(e){
-					if(!e.originalEvent && mediaelement.jarisEvent[data.id] && mediaelement.jarisEvent[data.id].elem == elem){
-						delete mediaelement.jarisEvent[data.id];
-						clearTimeout(localConnectionTimer);
-						clearTimeout(data.flashBlock);
+				.on({
+					'updatemediaelementdimensions loadedmetadata emptied': setDimension,
+					'remove': function(e){
+						if(!e.originalEvent && mediaelement.jarisEvent[data.id] && mediaelement.jarisEvent[data.id].elem == elem){
+							delete mediaelement.jarisEvent[data.id];
+							clearTimeout(localConnectionTimer);
+							clearTimeout(data.flashBlock);
+						}
 					}
-					box.remove();
 				})
+				.onWSOff('updateshadowdom', setDimension)
 			;
 		}
 		
@@ -3942,6 +4031,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			limitedTo: ['', 'auto', 'metadata', 'none']
 		});
 		
+		webshims.reflectProperties('source', ['type', 'media']);
+		
 		
 		['autoplay', 'controls'].forEach(function(name){
 			webshims.defineNodeNamesBooleanProperty(['audio', 'video'], name);
@@ -3977,6 +4068,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			}
 					
 		}, 'prop');
+	} else if(!('media' in document.createElement('source'))){
+		webshims.reflectProperties('source', ['media']);
 	}
 	
 });

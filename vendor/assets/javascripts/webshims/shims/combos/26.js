@@ -12,14 +12,14 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative == 1){
+	if(webshims.cfg.extendNative === 1){
 		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
-				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly..");
+				webshims.error("jQuery was included more than once. Make sure to include it only once or try the $.noConflict(extreme) feature! Webshims and other Plugins might not work properly. Or set webshims.cfg.no$Switch to 'true'.");
 				if (window.$) {
 					window.$ = webshims.$;
 				}
@@ -561,6 +561,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						setInterval(this.test, 600);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
+						$(document).on('updatelayout', this.handler);
 						$(window).bind('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -608,7 +609,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					
 					$(nativeElem).on('remove', function(e){
 						if (!e.originalEvent) {
-							$(shadowElem).remove();
+							setTimeout(function(){
+								$(shadowElem).remove();
+							}, 4);
 						}
 					});
 					
@@ -1086,7 +1089,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(jQuery, document);
+})(webshims.$, document);
 
 webshims.register('filereader', function( $, webshims ){
 	"use strict";

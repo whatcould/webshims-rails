@@ -75,6 +75,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		$.expr[":"][name] = $.expr.filters[name+"-element"];
 	});
 	
+	//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used) 
 	var pseudoFocus = $.expr[":"].focus;
 	$.expr[":"].focus = function(){
 		try {
@@ -97,10 +98,18 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 	
 	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
+	var poCFG = webshims.cfg.wspopover;
+	if(!poCFG.position && poCFG.position !== false){
+		poCFG.position = {
+			at: 'left bottom',
+			my: 'left top',
+			collision: 'fit flip'
+		};
+	}
 	webshims.wsPopover = {
 		id: 0,
 		_create: function(){
-			this.options = $.extend({}, webshims.cfg.wspopover, this.options);
+			this.options = $.extend(true, {}, poCFG, this.options);
 			this.id = webshims.wsPopover.id++;
 			this.eventns = '.wsoverlay' + this.id;
 			this.timers = {};
@@ -147,6 +156,11 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
+		} else if(message) {
+			validity = validity || $.prop(elem, 'validity') || {valid: 1};
+			if(validity.valid){
+				message = '';
+			}
 		}
 		if(typeof message == 'object'){
 			validity = validity || $.prop(elem, 'validity') || {valid: 1};

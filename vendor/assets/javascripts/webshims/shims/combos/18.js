@@ -707,11 +707,11 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		}
 		
 		if(opts){
-			o.options = jQuery.extend(true, {}, o.options || {}, opts);
+			o.options = $.extend(true, {}, o.options || {}, opts);
 			opts = o.options;
 		}
 		
-		if(o._create && jQuery.isFunction(o._create)){
+		if(o._create && $.isFunction(o._create)){
 			o._create(opts);
 		}
 		return o;
@@ -797,7 +797,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
     };
 
 }
-})(jQuery, jQuery.webshims);
+})(webshims.$, webshims);
 
 
 
@@ -865,7 +865,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		if(!('type' in cache)){
 			cache.type = getType(input[0]);
 		}
-		
+		if(cache.type == 'week'){return false;}
 		var ret = (validityState || {}).stepMismatch || false, base;
 		if(typeModels[cache.type] && typeModels[cache.type].step){
 			if( !('step' in cache) ){
@@ -1053,6 +1053,29 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		});
 	});
 	
+	/*
+	 * ToDO: WEEK
+	 */
+//	var getWeek = function(date){
+//		var time;
+//		var checkDate = new Date(date.getTime());
+//
+//		checkDate.setDate(checkDate.getDate() + 4 - (checkDate.getDay() || 7));
+//
+//		time = checkDate.getTime();
+//		checkDate.setMonth(0);
+//		checkDate.setDate(1);
+//		return Math.floor(Math.round((time - checkDate) / 86400000) / 7) + 1;
+//	};
+//	
+//	var setWeek = function(year, week){
+//		var date = new Date(year, 0, 1);
+//		
+//		week = (week - 1) * 86400000 * 7;
+//		date = new Date(date.getTime() + week);
+//		date.setDate(date.getDate() + 1 - (date.getDay() || 7));
+//		return date;
+//	};
 	
 	var typeProtos = {
 		
@@ -1129,6 +1152,56 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				return (date && date.getFullYear) ? addleadingZero(date.getUTCFullYear(), 4) +'-'+ addleadingZero(date.getUTCMonth()+1, 2) +'-'+ addleadingZero(date.getUTCDate(), 2) : false;
 			}
 		},
+		/*
+		 * ToDO: WEEK
+		 */
+//		week: {
+//			mismatch: function(val){
+//				if(!val || !val.split){return true;}
+//				var valA = val.split('-W');
+//				var ret = true;
+//				if(valA.length == 2 && valA[0].length > 3 && valA.length == 2){
+//					ret = this.dateToString(setWeek(valA[0], valA[1])) != val;
+//				}
+//				return ret;
+//			},
+//			step: 1,
+//			stepScaleFactor: 604800000,
+//			stepBase: -259200000,
+//			asDate: function(str, _noMismatch){
+//				var ret = null;
+//				if(_noMismatch || !this.mismatch(str)){
+//					ret = str.split('-W');
+//					ret = setWeek(ret[0], ret[1]);
+//				}
+//				return ret;
+//			},
+//			asNumber: function(str, _noMismatch){
+//				var ret = nan;
+//				var date = this.asDate(str, _noMismatch);
+//				if(date && date.getUTCFullYear){
+//					ret = date.getTime();
+//				}
+//				return ret;
+//			},
+//			dateToString: function(date){
+//				var week, checkDate;
+//				var ret = false;
+//				if(date && date.getFullYear){
+//					week = getWeek(date);
+//					if(week == 1){
+//						checkDate = new Date(date.getTime());
+//						checkDate.setDate(checkDate.getDate() + 7);
+//						date.setUTCFullYear(checkDate.getUTCFullYear());
+//					}
+//					ret = addleadingZero(date.getUTCFullYear(), 4) +'-W'+addleadingZero(week, 2);
+//				}
+//				return ret;
+//			},
+//			numberToString: function(num){
+//				return (isNumber(num)) ? this.dateToString(new Date( num * 1)) : false;
+//			}
+//		},
 		time: {
 			mismatch: function(val, _getParsed){
 				if(!val || !val.split || !(/\d$/.test(val))){return true;}
@@ -1286,8 +1359,6 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		typeProtos.month = $.extend({}, typeProtos.date, typeProtos.month);
 //		typeProtos['datetime-local'] = $.extend({}, typeProtos.date, typeProtos.time, typeProtos['datetime-local']);
 	}
-	
-	
 	
 	//'datetime-local'
 	['number', 'month', 'range', 'date', 'time', 'color'].forEach(function(type){
@@ -1816,14 +1887,14 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			 webshims._polyfill(['es5']);
 		}
 	}
-})(jQuery);
+})(window.webshims ? webshims.$ : jQuery);
 webshims.register('form-number-date-ui', function($, webshims, window, document, undefined, options){
 	"use strict";
 	var curCfg;
 	var formcfg = webshims.formcfg;
 	
 	var stopPropagation = function(e){
-		e.stopImmediatePropagation(e);
+		e.stopImmediatePropagation();
 	};
 	var createFormat = function(name){
 		if(!curCfg.patterns[name+'Obj']){
@@ -1894,6 +1965,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		number: {
 			step: 1
 		},
+//		week: {
+//			step: 1,
+//			start: new Date(nowDate)
+//		},
 		time: {
 			step: 60
 		},
@@ -2096,6 +2171,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			time: function(val){
 				return val;
 			},
+			week: function(val){
+				return val;
+			},
 			//todo empty val for month/split
 			month: function(val, options){
 				var names;
@@ -2145,6 +2223,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			number: function(val){
 				return (val+'').replace(curCfg.numberFormat[','], '').replace(curCfg.numberFormat['.'], '.');
 			},
+//			week: function(val){
+//				return val;
+//			},
 			time: function(val){
 				return val;
 			},
@@ -2281,6 +2362,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					steps[this.type].start = this.asNumber(steps[this.type].start);
 				}
 				
+				if(!webshims.picker[this.type]){
+					o.buttonOnly = false;
+				}
+				
 				for(i = 0; i < createOpts.length; i++){
 					if(o[createOpts[i]] != null){
 						this[createOpts[i]](o[createOpts[i]], o[createOpts[i]]);
@@ -2291,6 +2376,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				}
 				this.addBindings();
 				$(this.element).data('wsWidget'+o.type, this);
+				
+				
+				if(o.buttonOnly){
+					this.inputElements.prop({readOnly: true});
+				}
 				
 				this._init = true;
 				
@@ -2372,7 +2462,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					if(preventBlur.prevent){
 						e.preventDefault();
 						(isFocused || that.element.getShadowFocusElement()).focus();
-						e.stopImmediatePropagation();
+						stopPropagation(e);
 						return true;
 					}
 				};
@@ -2744,12 +2834,18 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		['readonly', 'disabled'].forEach(function(name){
 			var isDisabled = name == 'disabled';
 			wsWidgetProto[name] = function(val, boolVal){
-				if(this.options[name] != boolVal || !this._init){
-					this.options[name] = !!boolVal;
-					this.inputElements.prop(name, this.options[name]);
-					this.buttonWrapper[this.options[name] ? 'addClass' : 'removeClass']('ws-'+name);
+				var options = this.options;
+				if(options[name] != boolVal || !this._init){
+					options[name] = !!boolVal;
+					
+					if(!isDisabled && options.buttonOnly){
+						this.inputElements.attr({'aria-readonly': options[name]});
+					} else {
+						this.inputElements.prop(name, options[name]);
+					}
+					this.buttonWrapper[options[name] ? 'addClass' : 'removeClass']('ws-'+name);
 					if(isDisabled){
-						$('button', this.buttonWrapper).prop('disabled', this.options[name]);
+						$('button', this.buttonWrapper).prop('disabled', options[name]);
 					}
 				}
 			};
@@ -3036,9 +3132,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		
 		picker._common = function(data){
-			var popover = webshims.objectCreate(webshims.wsPopover, {}, {prepareFor: data.element});
-			var opener = $('<button type="button" class="ws-popover-opener"><span /></button>').appendTo(data.buttonWrapper);
 			var options = data.options;
+			var popover = webshims.objectCreate(webshims.wsPopover, {}, {prepareFor: data.element, position: options.widgetPosition});
+			var opener = $('<button type="button" class="ws-popover-opener"><span /></button>').appendTo(data.buttonWrapper);
+			
 			
 			var showPickerContent = function(){
 				(picker[data.type].showPickerContent || picker.showPickerContent)(data, popover);
@@ -3127,8 +3224,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				};
 				data.inputElements.on({
 					focus: function(){
-						if(!popover.stopOpen && (data.options.openOnFocus || (mouseFocus && options.openOnMouseFocus))){
-							popover.openedByFocus = !options.noInput;
+						if(!popover.stopOpen && (options.buttonOnly || options.openOnFocus || (mouseFocus && options.openOnMouseFocus))){
+							popover.openedByFocus = options.buttonOnly ? false : !options.noInput;
 							show();
 						} else {
 							popover.preventBlur();
@@ -3137,8 +3234,15 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					mousedown: function(){
 						mouseFocus = true;
 						setTimeout(resetMouseFocus, 9);
+						if(options.buttonOnly && popover.isVisible && popover.activeElement){
+							popover.openedByFocus = false;
+							setTimeout(function(){
+								popover.openedByFocus = false;
+								popover.activeElement.focus();
+							}, 4);
+						}
 						if(data.element.is(':focus')){
-							popover.openedByFocus = !options.noInput;
+							popover.openedByFocus = options.buttonOnly ? false : !options.noInput;
 							show();
 						}
 						popover.preventBlur();
@@ -3149,8 +3253,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			data.opener = opener;
 			$(data.orig).on('remove', function(e){
 				if(!e.originalEvent){
-					opener.remove();
-					popover.element.remove();
+					setTimeout(function(){
+						opener.remove();
+						popover.element.remove();
+					}, 4);
 				}
 			});
 			
@@ -3159,6 +3265,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		picker.month = picker._common;
 		picker.date = picker._common;
+//		picker.week = picker._common;
 		picker.color = function(data){
 			var ret = picker._common.apply(this, arguments);
 			var alpha = $(data.orig).data('alphacontrol');
@@ -3410,10 +3517,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					data.shim.element.addClass('has-input-buttons');
 				}
 				
+				data.shim.element.addClass($.prop(this, 'className'));
+				
 				if(opts.calculateWidth){
 					sizeInput(data.shim);
 				} else {
-					$(this).css({display: 'none'});
+					$(this).addClass('ws-important-hide');
 				}
 			}
 			

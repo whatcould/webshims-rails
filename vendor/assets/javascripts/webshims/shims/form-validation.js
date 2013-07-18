@@ -80,7 +80,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		if(!e.target){return;}
 		elem = $(e.target).getNativeElement()[0];
 		shadowElem = $(elem).getShadowElement();
-		if(elem.type == 'submit' || !$.prop(elem, 'willValidate') || (e.type == 'change' && !changeTypes[(shadowType = shadowElem.prop('type'))])){return;}
+		if(elem.type == 'submit' || !$.prop(elem, 'willValidate') || (e.type == 'change' && (shadowType = shadowElem.prop('type')) && !changeTypes[shadowType])){return;}
 		timer = $.data(elem, 'webshimsswitchvalidityclass');
 		var switchClass = function(){
 			if(!shadowType){
@@ -155,7 +155,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		}
 	};
 	
-	$(document.body)
+	$(document.body || 'html')
 		.on(options.validityUIEvents || 'focusout change refreshvalidityui invalid', switchValidityClass)
 		.on('reset resetvalui', function(e){
 			var elems = $(e.target);
@@ -187,18 +187,44 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		'width'
 	;
 	var hasTransition = ('transitionDelay' in document.documentElement.style);
+	var resetPos = {display: 'inline-block', left: 0, top: 0, marginTop: 0, marginLeft: 0, marginRight: 0, marginBottom: 0};
+	
 	setRoot();
 	webshims.ready('DOM', setRoot);
 	
-	webshims.getRelOffset = function(posElem, relElem){
+	
+	webshims.getRelOffset = function(posElem, relElem, opts){
+		var offset, bodyOffset, dirs;
 		posElem = $(posElem);
-		var offset = $(relElem).offset();
-		var bodyOffset;
-		$.swap($(posElem)[0], {visibility: 'hidden', display: 'inline-block', left: 0, top: 0}, function(){
-			bodyOffset = posElem.offset();
+		$.swap($(posElem)[0], resetPos, function(){
+			if($.position && opts && $.position.getScrollInfo){
+				if(!opts.of){
+					opts.of = relElem;
+				}
+				
+				opts.using = function(calced, data){
+					posElem.attr({'data-horizontal': data.horizontal, 'data-vertical': data.vertical});
+					offset = calced;
+				};
+				posElem.attr({
+					'data-horizontal': '', 
+					'data-vertical': '',
+					'data-my': opts.my || 'center',
+					'data-at': opts.at || 'center'
+				});
+				posElem.position(opts);
+				
+			} else {
+				offset = $(relElem).offset();
+				bodyOffset = posElem.offset();
+				offset.top -= bodyOffset.top;
+				offset.left -= bodyOffset.left;
+				
+				offset.top += relElem.outerHeight();
+			}
+			
 		});
-		offset.top -= bodyOffset.top;
-		offset.left -= bodyOffset.left;
+		
 		return offset;
 	};
 	
@@ -249,9 +275,10 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		},
 		prepareFor: function(element, visual){
 			var onBlur;
-			var opts = $.extend({}, this.options, $(element.prop('form') || []).data('wspopover') || {}, element.data('wspopover'));
 			var that = this;
 			var css = {};
+			var opts = $.extend(true, {}, this.options, $(element.prop('form') || []).data('wspopover') || {}, element.data('wspopover'));
+			this.lastOpts = opts;
 			this.lastElement = $(element).getShadowFocusElement();
 			if(!this.prepared || !this.options.prepareFor){
 				if(opts.appendTo == 'element'){
@@ -297,6 +324,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			$(document).off(this.eventns);
 			this.element.off('transitionend'+this.eventns);
 			this.stopBlur = false;
+			this.lastOpts = false;
 			$.each(this.timers, function(timerName, val){
 				clearTimeout(val);
 			});
@@ -324,9 +352,9 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			that.timers.forcehide = setTimeout(forceHide, hasTransition ? 600 : 40);
 		},
 		position: function(element){
-			var offset = webshims.getRelOffset(this.element.css({marginTop: 0, marginLeft: 0, marginRight: 0, marginBottom: 0}).removeAttr('hidden'), element);
-			offset.top += element.outerHeight();
-			this.element.css({marginTop: '', marginLeft: '', marginRight: '', marginBottom: ''}).css(offset);
+			var offset = webshims.getRelOffset(this.element.removeAttr('hidden'), element, (this.lastOpts || this.options).position);
+			
+			this.element.css(offset);
 		}
 	});
 	
@@ -334,6 +362,12 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	
 	/* some extra validation UI */
 	webshims.validityAlert = (function(){
+		
+		options.messagePopover.position = $.extend({}, {
+			at: 'left bottom',
+			my: 'left top',
+			collision: 'none'
+		}, options.messagePopover.position || {});
 			
 		var focusTimer = false;
 		
@@ -565,6 +599,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			},
 			submit: function(e){
 				if(options.iVal.sel && $(e.target).is(options.iVal.sel) && $.prop(e.target, 'noValidate') && !$(e.target).checkValidity()){
+					e.stopImmediatePropagation();
 					return false;
 				}
 			}
