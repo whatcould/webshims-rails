@@ -165,52 +165,6 @@ var swfmini = function() {
 	}
 	
 	
-	/* Functions to abstract and display alternative content
-	*/
-	function displayAltContent(obj) {
-		if (ua.ie && ua.win && obj.readyState != 4) {
-			// IE only: when a SWF is loading (AND: not available in cache) wait for the readyState of the object element to become 4 before removing it,
-			// because you cannot properly cancel a loading SWF file without breaking browser load references, also obj.onreadystatechange doesn't work
-			var el = createElement("div");
-			obj.parentNode.insertBefore(el, obj); // insert placeholder div that will be replaced by the alternative content
-			el.parentNode.replaceChild(abstractAltContent(obj), el);
-			obj.style.display = "none";
-			(function(){
-				if (obj.readyState == 4) {
-					obj.parentNode.removeChild(obj);
-				}
-				else {
-					setTimeout(arguments.callee, 10);
-				}
-			})();
-		}
-		else {
-			obj.parentNode.replaceChild(abstractAltContent(obj), obj);
-		}
-	} 
-
-	function abstractAltContent(obj) {
-		var ac = createElement("div");
-		if (ua.win && ua.ie) {
-			ac.innerHTML = obj.innerHTML;
-		}
-		else {
-			var nestedObj = obj.getElementsByTagName(OBJECT)[0];
-			if (nestedObj) {
-				var c = nestedObj.childNodes;
-				if (c) {
-					var cl = c.length;
-					for (var i = 0; i < cl; i++) {
-						if (!(c[i].nodeType == 1 && c[i].nodeName == "PARAM") && !(c[i].nodeType == 8)) {
-							ac.appendChild(c[i].cloneNode(true));
-						}
-					}
-				}
-			}
-		}
-		return ac;
-	}
-	
 	/* Cross-browser dynamic SWF creation
 	*/
 	function createSWF(attObj, parObj, id) {
@@ -499,8 +453,9 @@ var swfmini = function() {
 //DOM-Extension helper
 webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
-	
-	webshims.assumeARIA = $.support.getSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
+	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
+	var supportGetSetAttribute = !('getSetAttribute' in $.support) || $.support.getSetAttribute;
+	webshims.assumeARIA = supportGetSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
 		webshims.error("IE browser modes are busted in IE10. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
@@ -510,8 +465,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative === 1){
-		webshims.warn("extendNative configuration will be set to false by default with next release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
+	if(webshims.cfg.extendNative === undefined){
+		webshims.warn("extendNative configuration was set to false by default with this release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
@@ -1183,7 +1138,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 							
 							anchor.setAttribute('href', href+'' );
 							
-							if(!$.support.hrefNormalized){
+							if(!supportHrefNormalized){
 								try {
 									$(anchor).insertAfter(this);
 									ret = anchor.getAttribute('href', 4);
@@ -1624,6 +1579,10 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			options.customMessages = true;
 			toLoad.push('form-message');
 		}
+		if(options.customDatalist){
+			options.fD = true;
+			toLoad.push('form-datalist');
+		}
 		if(options.addValidators){
 			toLoad.push('form-validators');
 		}
@@ -1762,6 +1721,14 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 						return false;
 					}
 				});
+				if(typeof message == 'object'){
+					if(validity.typeMismatch && message.badInput){
+						message = message.badInput;
+					}
+					if(validity.badInput && message.typeMismatch){
+						message = message.typeMismatch;
+					}
+				}
 			}
 		}
 		
@@ -1917,6 +1884,7 @@ var validityPrototype = {
 	customError: false,
 
 	typeMismatch: false,
+	badInput: false,
 	rangeUnderflow: false,
 	rangeOverflow: false,
 	stepMismatch: false,
@@ -1976,20 +1944,6 @@ var validityRules = {
 		tooLong: function(){
 			return false;
 		},
-		typeMismatch: function (input, val, cache){
-			if(val === '' || cache.nodeName == 'select'){return false;}
-			var ret = false;
-			if(!('type' in cache)){
-				cache.type = getType(input[0]);
-			}
-			
-			if(typeModels[cache.type] && typeModels[cache.type].mismatch){
-				ret = typeModels[cache.type].mismatch(val, input);
-			} else if('validity' in input[0]){
-				ret = input[0].validity.typeMismatch;
-			}
-			return ret;
-		},
 		patternMismatch: function(input, val, cache) {
 			if(val === '' || cache.nodeName == 'select'){return false;}
 			var pattern = input.attr('pattern');
@@ -2005,6 +1959,23 @@ var validityRules = {
 		}
 	}
 ;
+
+$.each({typeMismatch: 'mismatch', badInput: 'bad'}, function(name, fn){
+	validityRules[name] = function (input, val, cache){
+		if(val === '' || cache.nodeName == 'select'){return false;}
+		var ret = false;
+		if(!('type' in cache)){
+			cache.type = getType(input[0]);
+		}
+		
+		if(typeModels[cache.type] && typeModels[cache.type][fn]){
+			ret = typeModels[cache.type][fn](val, input);
+		} else if('validity' in input[0] && ('name' in input[0].validity)){
+			ret = input[0].validity[name] || false;
+		}
+		return ret;
+	};
+});
 
 webshims.addValidityRule = function(type, fn){
 	validityRules[type] = fn;
@@ -2051,8 +2022,9 @@ $.event.special.invalid = {
 	}
 };
 
+var supportSubmitBubbles = !('submitBubbles' in $.support) || $.support.submitBubbles;
 var addSubmitBubbles = function(form){
-	if (!$.support.submitBubbles && form && typeof form == 'object' && !form._submit_attached ) {
+	if (!supportSubmitBubbles && form && typeof form == 'object' && !form._submit_attached ) {
 				
 		$.event.add( form, 'submit._submit', function( event ) {
 			event._submit_bubble = true;
@@ -2061,7 +2033,7 @@ var addSubmitBubbles = function(form){
 		form._submit_attached = true;
 	}
 };
-if(!$.support.submitBubbles && $.event.special.submit){
+if(!supportSubmitBubbles && $.event.special.submit){
 	$.event.special.submit.setup = function() {
 		// Only need this for delegated form submit events
 		if ( $.nodeName( this, "form" ) ) {
@@ -3630,9 +3602,8 @@ try {
 
 webshims.register('form-message', function($, webshims, window, document, undefined, options){
 	"use strict";
-	if(options.overrideMessages){
+	if(options.lazyCustomMessages){
 		options.customMessages = true;
-		webshims.error('overrideMessages is deprecated. use customMessages instead.');
 	}
 	var validityMessages = webshims.validityMessages;
 	
@@ -3642,7 +3613,10 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		typeMismatch: {
 			defaultMessage: 'Please enter a valid value.',
 			email: 'Please enter an email address.',
-			url: 'Please enter a URL.',
+			url: 'Please enter a URL.'
+		},
+		badInput: {
+			defaultMessage: 'Please enter a valid value.',
 			number: 'Please enter a number.',
 			date: 'Please enter a date.',
 			time: 'Please enter a time.',
@@ -3695,13 +3669,16 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		typeMismatch: {
 			defaultMessage: '{%value} ist in diesem Feld nicht zulässig.',
 			email: '{%value} ist keine gültige E-Mail-Adresse.',
-			url: '{%value} ist kein(e) gültige(r) Webadresse/Pfad.',
-			number: '{%value} ist keine Nummer.',
-			date: '{%value} ist kein Datum.',
-			time: '{%value} ist keine Uhrzeit.',
-			month: '{%value} ist in diesem Feld nicht zulässig.',
-			range: '{%value} ist keine Nummer.',
-			"datetime-local": '{%value} ist kein Datum-Uhrzeit Format.'
+			url: '{%value} ist kein(e) gültige(r) Webadresse/Pfad.'
+		},
+		badInput: {
+			defaultMessage: 'Geben Sie einen zulässigen Wert ein.',
+			number: 'Geben Sie eine Nummer ein.',
+			date: 'Geben Sie ein Datum ein.',
+			time: 'Geben Sie eine Uhrzeit ein.',
+			month: 'Geben Sie einen Monat mit Jahr ein.',
+			range: 'Geben Sie eine Nummer.',
+			"datetime-local": 'Geben Sie ein Datum mit Uhrzeit ein.'
 		},
 		rangeUnderflow: {
 			defaultMessage: '{%value} ist zu niedrig. {%min} ist der unterste Wert, den Sie benutzen können.'
@@ -3749,11 +3726,17 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 	
 	webshims.createValidationMessage = function(elem, name){
 		var widget;
-		var message = getMessageFromObj(currentValidationMessage[name], elem);
 		var type = $.prop(elem, 'type');
+		var message = getMessageFromObj(currentValidationMessage[name], elem);
+		if(!message && name == 'badInput'){
+			message = getMessageFromObj(currentValidationMessage.typeMismatch, elem);
+		}
+		if(!message && name == 'typeMismatch'){
+			message = getMessageFromObj(currentValidationMessage.badInput, elem);
+		}
 		if(!message){
 			message = getMessageFromObj(validityMessages[''][name], elem) || $.prop(elem, 'validationMessage');
-			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+$.webshims.activeLang());
+			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+webshims.activeLang());
 		}
 		if(message){
 			['value', 'min', 'max', 'title', 'maxlength', 'label'].forEach(function(attr){
@@ -3796,20 +3779,14 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 	webshims.activeLang({
 		register: 'form-core',
 		callback: function(val){
-			$.each(validityMessages, function(i, val){
-				if(validityMessages[val]){
-					currentValidationMessage = validityMessages[val];
-					return false;
-				}
-			});
+			if(validityMessages[val]){
+				currentValidationMessage = validityMessages[val];
+			}
 		}
 	});
 	
 	implementProperties.forEach(function(messageProp){
-		var skipNames = {
-			valid: 1,
-			badInput: 1
-		};
+		
 		webshims.defineNodeNamesProperty(['fieldset', 'output', 'button'], messageProp, {
 			prop: {
 				value: '',
@@ -3838,16 +3815,14 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 							if(message){return message;}
 						}
 						$.each(validity, function(name, prop){
-							if(skipNames[name] || !prop){return;}
+							if(name == 'valid' || !prop){return;}
 							
 							message = webshims.createValidationMessage(elem, name);
 							if(message){
 								return false;
 							}
 						});
-						if(!message && validity.badInput){
-							message = webshims.createValidationMessage(elem, 'typeMismatch') || webshims.createValidationMessage(elem, 'valueMissing');
-						}
+						
 						return message || '';
 					},
 					writeable: false
@@ -3955,34 +3930,6 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 					}
 				}
 			};
-			
-			if(formsCFG.customDatalist && (!listSupport || !('selectedOption' in $('<input />')[0]))){
-				//currently not supported x-browser (FF4 has not implemented and is not polyfilled )
-				inputListProto.selectedOption = {
-					prop: {
-						writeable: false,
-						get: function(){
-							var elem = this;
-							var list = $.prop(elem, 'list');
-							var ret = null;
-							var value, options;
-							if(!list){return ret;}
-							value = $.prop(elem, 'value');
-							if(!value){return ret;}
-							options = $.prop(list, 'options');
-							if(!options.length){return ret;}
-							$.each(options, function(i, option){
-								if(value == $.prop(option, 'value')){
-									ret = option;
-									return false;
-								}
-							});
-							return ret;
-						}
-					}
-				};
-			}
-			
 			
 			if(listSupport){
 				//options only return options, if option-elements are rooted: but this makes this part of HTML5 less backwards compatible
@@ -4162,7 +4109,8 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 			}
 		});
 	};
-	var options = webshims.cfg.mediaelement;
+	var wsCfg = webshims.cfg;
+	var options = wsCfg.mediaelement;
 	var hasFullTrackSupport;
 	var hasSwf;
 	if(!options){
@@ -4249,7 +4197,7 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 	}
 	hasFullTrackSupport = Modernizr.track && !bugs.track;
 
-webshims.register('mediaelement-core', function($, webshims, window, document, undefined){
+webshims.register('mediaelement-core', function($, webshims, window, document, undefined, options){
 	hasSwf = swfmini.hasFlashPlayerVersion('9.0.115');
 	$('html').addClass(hasSwf ? 'swf' : 'no-swf');
 	var mediaelement = webshims.mediaelement;
@@ -4333,11 +4281,21 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	var loadTrackUi = function(){
 		if(loadTrackUi.loaded){return;}
 		loadTrackUi.loaded = true;
-		webshims.ready('WINDOWLOAD', function(){
-			loadThird();
-			webshims.loader.loadList(['track-ui']);
-		});
+		if(!options.noAutoTrack){
+			webshims.ready('WINDOWLOAD', function(){
+				loadThird();
+				webshims.loader.loadList(['track-ui']);
+			});
+		}
 	};
+//	var loadMediaGroup = function(){
+//		if(!loadMediaGroup.loaded){
+//			loadMediaGroup.loaded = true;
+//			webshims.ready(window.MediaController ? 'WINDOWLOAD' : 'DOM', function(){
+//				webshims.loader.loadList(['mediagroup']);
+//			});
+//		}
+//	};
 	var loadYt = (function(){
 		var loaded;
 		return function(){
@@ -4361,6 +4319,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		test: !hasYt,
 		d: ['dom-support']
 	});
+	
+	
+//	webshims.addModule('mediagroup', {
+//		d: ['mediaelement', 'dom-support']
+//	});
 	
 	mediaelement.mimeTypes = {
 		audio: {
@@ -4660,8 +4623,6 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			
 		};
 		
-		
-		
 		webshims.ready('dom-support', function(){
 			handleMedia = true;
 			
@@ -4670,7 +4631,8 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			}
 			
 			['audio', 'video'].forEach(function(nodeName){
-				var supLoad = webshims.defineNodeNameProperty(nodeName, 'load',  {
+				var supLoad, supController;
+				supLoad = webshims.defineNodeNameProperty(nodeName, 'load',  {
 					prop: {
 						value: function(){
 							var data = webshims.data(this, 'mediaelement');
@@ -4701,7 +4663,59 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 						}
 					}
 				});
+				
+//				supController = webshims.defineNodeNameProperty(nodeName, 'controller',  {
+//					prop: {
+//						get: function(type){
+//							if(!loadMediaGroup.loaded){
+//								loadMediaGroup();
+//							}
+//							if(mediaelement.controller){
+//								return mediaelement.controller[nodeName].get.apply(this, arguments);
+//							}
+//							return supController.prop._supget && supController.prop._supget.apply(this, arguments);
+//						},
+//						set: function(){
+//							var that = this;
+//							var args = arguments;
+//							if(!loadMediaGroup.loaded){
+//								loadMediaGroup();
+//							}
+//							if(mediaelement.controller){
+//								return mediaelement.controller[nodeName].set.apply(that, args);
+//							} else {
+//								webshims.ready('mediagroup', function(){
+//									mediaelement.controller[nodeName].set.apply(that, args);
+//								});
+//							}
+//							return supController.prop._supset && supController.prop._supset.apply(this, arguments);
+//						}
+//					}
+//				});
+				
+//				webshims.ready('mediagroup', function(){
+//					mediaelement.controller[nodeName].sup = supController;
+//				});
 			});
+			
+//			webshims.onNodeNamesPropertyModify(['audio', 'video'], ['mediaGroup'], {
+//				set: function(){
+//					var that = this;
+//					var args = arguments;
+//					if(!loadMediaGroup.loaded){
+//						loadMediaGroup();
+//					}
+//					if(mediaelement.mediagroup){
+//						mediaelement.mediagroup.set.apply(that, args);
+//					} else {
+//						webshims.ready('mediagroup', function(){
+//							mediaelement.mediagroup.set.apply(that, args);
+//						});
+//					}
+//				},
+//				initAttr: true
+//			});
+			
 			webshims.onNodeNamesPropertyModify(['audio', 'video'], ['src', 'poster'], {
 				set: function(){
 					var elem = this;
@@ -4723,6 +4737,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				if(!loadTrackUi.loaded && $('track', media).length){
 					loadTrackUi();
 				}
+//				if(!loadMediaGroup.loaded && this.getAttribute('mediagroup')){
+//					loadMediaGroup();
+//				}
 				media = null;
 			});
 		});
@@ -4737,9 +4754,6 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 								loadThird();
 								handleMedia = true;
 								return false;
-							}
-							if((!hasFullTrackSupport || webshims.modules.track.options.override) && !loadTrackUi.loaded && $('track', this).length){
-								loadTrackUi();
 							}
 						})
 					;

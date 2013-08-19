@@ -2,8 +2,8 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	var isWebkit = 'webkitURL' in window;
 	var chromeBugs = isWebkit && Modernizr.formvalidation && !webshims.bugs.bustedValidity;
 	var webkitVersion = chromeBugs && parseFloat((navigator.userAgent.match(/Safari\/([\d\.]+)/) || ['', '999999'])[1], 10);
-	var invalidClass = 'user-error';
-	var validClass = 'user-success';
+	var invalidClass = options.iVal.errorClass || 'user-error';
+	var validClass = options.iVal.successClass || 'user-success';
 	var checkTypes = {checkbox: 1, radio: 1};
 	
 	var emptyJ = $([]);
@@ -76,6 +76,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		'datetime-local': 1
 	};
 	var switchValidityClass = function(e){
+		if(!options.iVal.sel){return;}
 		var elem, timer, shadowElem, shadowType;
 		if(!e.target){return;}
 		elem = $(e.target).getNativeElement()[0];
@@ -182,7 +183,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			$(document.documentElement)
 		;
 	};
-	var minWidth = (Modernizr.boxSizing || Modernizr['display-table'] || $.support.getSetAttribute) ?
+	var minWidth = (Modernizr.boxSizing || Modernizr['display-table'] || $.support.getSetAttribute || $.support.boxSizing) ?
 		'minWidth' :
 		'width'
 	;
@@ -235,14 +236,21 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			return container == contained || $.contains(container, contained);
 		},
 		show: function(element){
+			if(this.isVisible){return;}
 			var e = $.Event('wspopoverbeforeshow');
 			this.element.trigger(e);
-			if(e.isDefaultPrevented() || this.isVisible){return;}
+			if(e.isDefaultPrevented()){return;}
 			this.isVisible = true;
 			element = $(element || this.options.prepareFor).getNativeElement() ;
 			
 			var that = this;
 			var visual = $(element).getShadowElement();
+			var delayedRepos = function(e){
+				clearTimeout(that.timers.repos);
+				that.timers.repos = setTimeout(function(){
+					that.position(visual);
+				}, e && e.type == 'pospopover' ? 4 : 200);
+			};
 
 			this.clear();
 			this.element.removeClass('ws-po-visible').css('display', 'none');
@@ -256,22 +264,15 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					that.element.addClass('ws-po-visible').trigger('wspopovershow');
 				}, 9);
 			}, 9);
-			this.element.on('remove', function(e){
-				if(!e.originalEvent){
-					that.destroy();
-				}
-			});
+			
 			$(document).on('focusin'+this.eventns+' mousedown'+this.eventns, function(e){
 				if(that.options.hideOnBlur && !that.stopBlur && !that.isInElement(that.lastElement[0] || document.body, e.target) && !that.isInElement(element[0] || document.body, e.target) && !that.isInElement(that.element[0], e.target)){
 					that.hide();
 				}
 			});
-			$(window).on('resize'+this.eventns + ' pospopover'+this.eventns, function(){
-				clearTimeout(that.timers.repos);
-				that.timers.repos = setTimeout(function(){
-					that.position(visual);
-				}, 400);
-			});
+			
+			this.element.off('pospopover').on('pospopover', delayedRepos);
+			$(window).on('resize'+this.eventns + ' pospopover'+this.eventns, delayedRepos);
 		},
 		prepareFor: function(element, visual){
 			var onBlur;
@@ -476,7 +477,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				}
 			}
 			if(!fieldWrapper){
-				fieldWrapper = $(elem).parent().closest(':not(span, label, em, strong, b, mark, p)');
+				fieldWrapper = $(elem).parent().closest(':not(span, label, em, strong, b, i, mark, p)');
 			}
 			return fieldWrapper;
 		},

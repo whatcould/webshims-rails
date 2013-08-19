@@ -33,6 +33,10 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			options.customMessages = true;
 			toLoad.push('form-message');
 		}
+		if(options.customDatalist){
+			options.fD = true;
+			toLoad.push('form-datalist');
+		}
 		if(options.addValidators){
 			toLoad.push('form-validators');
 		}
@@ -171,6 +175,14 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 						return false;
 					}
 				});
+				if(typeof message == 'object'){
+					if(validity.typeMismatch && message.badInput){
+						message = message.badInput;
+					}
+					if(validity.badInput && message.typeMismatch){
+						message = message.typeMismatch;
+					}
+				}
 			}
 		}
 		
