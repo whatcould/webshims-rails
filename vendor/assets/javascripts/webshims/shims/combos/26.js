@@ -13,10 +13,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative === undefined){
-		webshims.warn("extendNative configuration was set to false by default with this release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
-	}
-	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
@@ -1094,9 +1090,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 webshims.register('filereader', function( $, webshims ){
 	"use strict";
-	
+	/**
+	 * Code is based on https://github.com/Jahdrien/FileReader
+	 * 
+	 */
 	(function(){
-		var swfobject = swfmini;
+		var swfobject = window.swfmini || window.swfobject;
 	
 		var readyCallbacks = $.Callbacks('once unique memory'),
 		inputsCount = 0,

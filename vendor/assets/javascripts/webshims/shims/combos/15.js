@@ -13,10 +13,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative === undefined){
-		webshims.warn("extendNative configuration was set to false by default with this release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
-	}
-	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
@@ -1297,62 +1293,12 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
-		if('form' in e.target && $(e.target).is(':invalid')){
+		if('form' in e.target && (e.target.list || $(e.target).is(':invalid'))){
 			lazyLoad();
 		}
 	});
 	webshims.ready('WINDOWLOAD', lazyLoad);
 	
-	if(options.replaceValidationUI){
-		webshims.ready('DOM forms', function(){
-			$(document).on('firstinvalid', function(e){
-				if(!e.isInvalidUIPrevented()){
-					e.preventDefault();
-					webshims.validityAlert.showFor( e.target ); 
-				}
-			});
-		});
-	}
-	
-	/* extension, but also used to fix native implementation workaround/bugfixes */
-	(function(){
-		var firstEvent,
-			invalids = [],
-			stopSubmitTimer,
-			form
-		;
-		
-		$(document).on('invalid', function(e){
-			if(e.wrongWebkitInvalid){return;}
-			var jElm = $(e.target);
-			
-			
-			if(!firstEvent){
-				//trigger firstinvalid
-				firstEvent = $.Event('firstinvalid');
-				firstEvent.isInvalidUIPrevented = e.isDefaultPrevented;
-				var firstSystemInvalid = $.Event('firstinvalidsystem');
-				$(document).triggerHandler(firstSystemInvalid, {element: e.target, form: e.target.form, isInvalidUIPrevented: e.isDefaultPrevented});
-				jElm.trigger(firstEvent);
-			}
-
-			//if firstinvalid was prevented all invalids will be also prevented
-			if( firstEvent && firstEvent.isDefaultPrevented() ){
-				e.preventDefault();
-			}
-			invalids.push(e.target);
-			e.extraData = 'fix'; 
-			clearTimeout(stopSubmitTimer);
-			stopSubmitTimer = setTimeout(function(){
-				var lastEvent = {type: 'lastinvalid', cancelable: false, invalidlist: $(invalids)};
-				//reset firstinvalid
-				firstEvent = false;
-				invalids = [];
-				$(e.target).trigger(lastEvent, lastEvent);
-			}, 9);
-			jElm = null;
-		});
-	})();
 });
 
 if(!Modernizr.formvalidation || webshims.bugs.bustedValidity){
@@ -2688,6 +2634,7 @@ try {
 	var isOver = (webshims.cfg.forms.placeholderType == 'over');
 	var isResponsive = (webshims.cfg.forms.responsivePlaceholder);
 	var polyfillElements = ['textarea'];
+	var debug = webshims.debug !== false;
 	if(!Modernizr.input.placeholder || bustedPlaceholder){
 		polyfillElements.push('input');
 	}
@@ -2778,6 +2725,11 @@ try {
 				data = $.data(elem, 'placeHolder');
 				if(!data){return;}
 			}
+			var isVisible = $(elem).hasClass('placeholder-visible');
+			if(placeholderTxt === false){
+				placeholderTxt = $.attr(elem, 'placeholder') || '';
+			}
+			
 			$(elem).unbind('.placeholderremove');
 			
 			if(value === false){
@@ -2785,7 +2737,7 @@ try {
 			}
 			
 			if(!value && (type == 'focus' || (!type && $(elem).is(':focus')))){
-				if(elem.type == 'password' || isOver || $(elem).hasClass('placeholder-visible')){
+				if(elem.type == 'password' || isOver || isVisible){
 					hidePlaceholder(elem, data, '', true);
 				}
 				return;
@@ -2795,9 +2747,7 @@ try {
 				hidePlaceholder(elem, data, value);
 				return;
 			}
-			if(placeholderTxt === false){
-				placeholderTxt = $.attr(elem, 'placeholder') || '';
-			}
+			
 			if(placeholderTxt && !value){
 				showPlaceholder(elem, data, placeholderTxt);
 			} else {
@@ -2905,6 +2855,7 @@ try {
 						var reset = function(e){
 							if($(elem).hasClass('placeholder-visible')){
 								hidePlaceholder(elem, data, '');
+								
 								setTimeout(function(){
 									if(!e || e.type != 'submit' || e.isDefaultPrevented()){
 										changePlaceholderVisibility(elem, false, false, data );

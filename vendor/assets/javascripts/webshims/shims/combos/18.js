@@ -1571,7 +1571,17 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			this.value(this.options.value, true);
 		},
 		step: function(val){
-			this.options.step = val == 'any' ? 'any' : retDefault(val, 1);
+			var o = this.options;
+			var step = val == 'any' ? 'any' : retDefault(val, 1);
+			
+			if(o.stepping){
+				if(step != 'any' && o.stepping % step){
+					webshims.error('wrong stepping value for type range:'+ (o.stepping % step));
+				} else {
+					step = o.stepping;
+				}
+			}
+			o.step = step;
 			this.value(this.options.value);
 		},
 		
@@ -2292,6 +2302,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						fVal[0] = tmp;
 					}
 					val = this.date(fVal[0], o) +'T'+ this.time(fVal[1], o);
+				} else if (fVal.length == 3) {
+					val = this.date(fVal[0], o) +'T'+ this.time(fVal[1]+fVal[2], o);
 				}
 				return val;
 			},
@@ -3148,7 +3160,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		picker._actions = {
 			changeInput: function(val, popover, data){
-				picker._actions.cancel(val, popover, data);
+				if(!data.options.noChangeDismiss){
+					picker._actions.cancel(val, popover, data);
+				}
 				data.setChange(val);
 			},
 			cancel: function(val, popover, data){
@@ -3695,7 +3709,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			});
 		}
 		
-		var isStupid = modernizrInputTypes.number && navigator.userAgent.indexOf('Touch') == -1 && (/MSIE 1[0|1]\.\d/.test(navigator.userAgent) || /Trident\/7\.0/.test(navigator.userAgent));
+		var isStupid = modernizrInputTypes.number && navigator.userAgent.indexOf('Touch') == -1 && ((/MSIE 1[0|1]\.\d/.test(navigator.userAgent)) || (/Trident\/7\.0/.test(navigator.userAgent)));
 		['number', 'time', 'month', 'date', 'color', 'datetime-local'].forEach(function(name){
 			if(!modernizrInputTypes[name] || options.replaceUI || (name == 'number' && isStupid)){
 				extendType(name, {
