@@ -465,10 +465,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative === undefined){
-		webshims.warn("extendNative configuration was set to false by default with this release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
-	}
-	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
@@ -1749,62 +1745,12 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
-		if('form' in e.target && $(e.target).is(':invalid')){
+		if('form' in e.target && (e.target.list || $(e.target).is(':invalid'))){
 			lazyLoad();
 		}
 	});
 	webshims.ready('WINDOWLOAD', lazyLoad);
 	
-	if(options.replaceValidationUI){
-		webshims.ready('DOM forms', function(){
-			$(document).on('firstinvalid', function(e){
-				if(!e.isInvalidUIPrevented()){
-					e.preventDefault();
-					webshims.validityAlert.showFor( e.target ); 
-				}
-			});
-		});
-	}
-	
-	/* extension, but also used to fix native implementation workaround/bugfixes */
-	(function(){
-		var firstEvent,
-			invalids = [],
-			stopSubmitTimer,
-			form
-		;
-		
-		$(document).on('invalid', function(e){
-			if(e.wrongWebkitInvalid){return;}
-			var jElm = $(e.target);
-			
-			
-			if(!firstEvent){
-				//trigger firstinvalid
-				firstEvent = $.Event('firstinvalid');
-				firstEvent.isInvalidUIPrevented = e.isDefaultPrevented;
-				var firstSystemInvalid = $.Event('firstinvalidsystem');
-				$(document).triggerHandler(firstSystemInvalid, {element: e.target, form: e.target.form, isInvalidUIPrevented: e.isDefaultPrevented});
-				jElm.trigger(firstEvent);
-			}
-
-			//if firstinvalid was prevented all invalids will be also prevented
-			if( firstEvent && firstEvent.isDefaultPrevented() ){
-				e.preventDefault();
-			}
-			invalids.push(e.target);
-			e.extraData = 'fix'; 
-			clearTimeout(stopSubmitTimer);
-			stopSubmitTimer = setTimeout(function(){
-				var lastEvent = {type: 'lastinvalid', cancelable: false, invalidlist: $(invalids)};
-				//reset firstinvalid
-				firstEvent = false;
-				invalids = [];
-				$(e.target).trigger(lastEvent, lastEvent);
-			}, 9);
-			jElm = null;
-		});
-	})();
 });
 
 if(!Modernizr.formvalidation || webshims.bugs.bustedValidity){
@@ -3140,6 +3086,7 @@ try {
 	var isOver = (webshims.cfg.forms.placeholderType == 'over');
 	var isResponsive = (webshims.cfg.forms.responsivePlaceholder);
 	var polyfillElements = ['textarea'];
+	var debug = webshims.debug !== false;
 	if(!Modernizr.input.placeholder || bustedPlaceholder){
 		polyfillElements.push('input');
 	}
@@ -3230,6 +3177,11 @@ try {
 				data = $.data(elem, 'placeHolder');
 				if(!data){return;}
 			}
+			var isVisible = $(elem).hasClass('placeholder-visible');
+			if(placeholderTxt === false){
+				placeholderTxt = $.attr(elem, 'placeholder') || '';
+			}
+			
 			$(elem).unbind('.placeholderremove');
 			
 			if(value === false){
@@ -3237,7 +3189,7 @@ try {
 			}
 			
 			if(!value && (type == 'focus' || (!type && $(elem).is(':focus')))){
-				if(elem.type == 'password' || isOver || $(elem).hasClass('placeholder-visible')){
+				if(elem.type == 'password' || isOver || isVisible){
 					hidePlaceholder(elem, data, '', true);
 				}
 				return;
@@ -3247,9 +3199,7 @@ try {
 				hidePlaceholder(elem, data, value);
 				return;
 			}
-			if(placeholderTxt === false){
-				placeholderTxt = $.attr(elem, 'placeholder') || '';
-			}
+			
 			if(placeholderTxt && !value){
 				showPlaceholder(elem, data, placeholderTxt);
 			} else {
@@ -3357,6 +3307,7 @@ try {
 						var reset = function(e){
 							if($(elem).hasClass('placeholder-visible')){
 								hidePlaceholder(elem, data, '');
+								
 								setTimeout(function(){
 									if(!e || e.type != 'submit' || e.isDefaultPrevented()){
 										changePlaceholderVisibility(elem, false, false, data );
@@ -4120,6 +4071,7 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 	if(hasNative){
 		var videoElem = document.createElement('video');
 		Modernizr.videoBuffered = ('buffered' in videoElem);
+		Modernizr.mediaDefaultMuted = ('defaultMuted' in videoElem);
 		supportsLoop = ('loop' in videoElem);
 		
 		webshims.capturingEvents(['play', 'playing', 'waiting', 'paused', 'ended', 'durationchange', 'loadedmetadata', 'canplay', 'volumechange']);
@@ -4133,20 +4085,15 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 		
 		if(!options.preferFlash){
 			var noSwitch = {
-				1: 1,
-				2: 1
+				1: 1
 			};
 			var switchOptions = function(e){
 				var media, error, parent;
 				if(!options.preferFlash && 
 				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
-				(media = $(e.target).closest('audio, video')) && !noSwitch[(error = media.prop('error'))]
+				(media = $(e.target).closest('audio, video')) && (error = media.prop('error')) && !noSwitch[error.code]
 				){
-					if(error == null){
-						webshims.warn("There was an unspecified error on a mediaelement");
-						return;
-						
-					}
+					
 					$(function(){
 						if(hasSwf && !options.preferFlash){
 							loadSwf();
@@ -4158,7 +4105,7 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 										$('audio, video').each(function(){
 											webshims.mediaelement.selectSource(this);
 										});
-										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error'));
+										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error')+ 'first error: '+ error);
 									}
 								}, 9);
 							});
@@ -4364,7 +4311,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		if(src.indexOf('rtmp') === 0){
 			return nodeName+'/rtmp';
 		}
-		src = src.split('?')[0].split('.');
+		src = src.split('?')[0].split('#')[0].split('.');
 		src = src[src.length - 1];
 		var mt;
 		
@@ -4483,7 +4430,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			webshims.error('mediaelementError: '+ message);
 			setTimeout(function(){
 				if($(elem).data('mediaerror')){
-					$(elem).trigger('mediaerror');
+					$(elem).addClass('media-error').trigger('mediaerror');
 				}
 			}, 1);
 		}
@@ -4547,6 +4494,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var parent = elem.parentNode;
 		
 		clearTimeout(baseData.loadTimer);
+		$(elem).removeClass('media-error');
 		$.data(elem, 'mediaerror', false);
 		
 		if(!_srces.length || !parent || parent.nodeType != 1 || stopParent.test(parent.nodeName || '')){return;}
@@ -4574,7 +4522,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var testFixMedia = function(){
 			if(webshims.implement(this, 'mediaelement')){
 				selectSource(this);
-				
+				if(!Modernizr.mediaDefaultMuted && $.attr(this, 'muted') != null){
+					$.prop(this, 'muted', true);
+				}
 				//fixes for FF 12 and IE9/10 || does not hurt, if run in other browsers
 				if(hasNative && (!supportsLoop || ('ActiveXObject' in window))){
 					var bufferTimer;

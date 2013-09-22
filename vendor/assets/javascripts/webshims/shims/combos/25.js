@@ -1268,10 +1268,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
 	}
 	
-	if(webshims.cfg.extendNative === undefined){
-		webshims.warn("extendNative configuration was set to false by default with this release. In case you rely on it set it to 'true' otherwise to 'false'. See http://bit.ly/16OOTQO");
-	}
-	
 	if (!webshims.cfg.no$Switch) {
 		var switch$ = function(){
 			if (window.jQuery && (!window.$ || window.jQuery == window.$) && !window.jQuery.webshims) {
@@ -2349,9 +2345,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 webshims.register('filereader', function( $, webshims ){
 	"use strict";
-	
+	/**
+	 * Code is based on https://github.com/Jahdrien/FileReader
+	 * 
+	 */
 	(function(){
-		var swfobject = swfmini;
+		var swfobject = window.swfmini || window.swfobject;
 	
 		var readyCallbacks = $.Callbacks('once unique memory'),
 		inputsCount = 0,
@@ -2760,6 +2759,7 @@ webshims.register('filereader', function( $, webshims ){
 	if(hasNative){
 		var videoElem = document.createElement('video');
 		Modernizr.videoBuffered = ('buffered' in videoElem);
+		Modernizr.mediaDefaultMuted = ('defaultMuted' in videoElem);
 		supportsLoop = ('loop' in videoElem);
 		
 		webshims.capturingEvents(['play', 'playing', 'waiting', 'paused', 'ended', 'durationchange', 'loadedmetadata', 'canplay', 'volumechange']);
@@ -2773,20 +2773,15 @@ webshims.register('filereader', function( $, webshims ){
 		
 		if(!options.preferFlash){
 			var noSwitch = {
-				1: 1,
-				2: 1
+				1: 1
 			};
 			var switchOptions = function(e){
 				var media, error, parent;
 				if(!options.preferFlash && 
 				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
-				(media = $(e.target).closest('audio, video')) && !noSwitch[(error = media.prop('error'))]
+				(media = $(e.target).closest('audio, video')) && (error = media.prop('error')) && !noSwitch[error.code]
 				){
-					if(error == null){
-						webshims.warn("There was an unspecified error on a mediaelement");
-						return;
-						
-					}
+					
 					$(function(){
 						if(hasSwf && !options.preferFlash){
 							loadSwf();
@@ -2798,7 +2793,7 @@ webshims.register('filereader', function( $, webshims ){
 										$('audio, video').each(function(){
 											webshims.mediaelement.selectSource(this);
 										});
-										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error'));
+										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error')+ 'first error: '+ error);
 									}
 								}, 9);
 							});
@@ -3004,7 +2999,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		if(src.indexOf('rtmp') === 0){
 			return nodeName+'/rtmp';
 		}
-		src = src.split('?')[0].split('.');
+		src = src.split('?')[0].split('#')[0].split('.');
 		src = src[src.length - 1];
 		var mt;
 		
@@ -3123,7 +3118,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			webshims.error('mediaelementError: '+ message);
 			setTimeout(function(){
 				if($(elem).data('mediaerror')){
-					$(elem).trigger('mediaerror');
+					$(elem).addClass('media-error').trigger('mediaerror');
 				}
 			}, 1);
 		}
@@ -3187,6 +3182,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var parent = elem.parentNode;
 		
 		clearTimeout(baseData.loadTimer);
+		$(elem).removeClass('media-error');
 		$.data(elem, 'mediaerror', false);
 		
 		if(!_srces.length || !parent || parent.nodeType != 1 || stopParent.test(parent.nodeName || '')){return;}
@@ -3214,7 +3210,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var testFixMedia = function(){
 			if(webshims.implement(this, 'mediaelement')){
 				selectSource(this);
-				
+				if(!Modernizr.mediaDefaultMuted && $.attr(this, 'muted') != null){
+					$.prop(this, 'muted', true);
+				}
 				//fixes for FF 12 and IE9/10 || does not hurt, if run in other browsers
 				if(hasNative && (!supportsLoop || ('ActiveXObject' in window))){
 					var bufferTimer;
@@ -3438,6 +3436,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		networkState: 0,
 		videoHeight: 0,
 		videoWidth: 0,
+		seeking: false,
 		error: null,
 		buffered: {
 			start: function(index){
@@ -3541,7 +3540,12 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		}
 		data.readyState = readyState;
 	};
-	
+	var callSeeked = function(data){
+		if(data.seeking && Math.abs(data.currentTime - data._lastSeektime) < 2){
+			data.seeking = false;
+			$(data._elem).triggerHandler('seeked');
+		}
+	};
 	
 	
 	mediaelement.jarisEvent = {};
@@ -3569,6 +3573,20 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 					trigger(data._elem, 'playing');
 				}
 			}
+		},
+		onSeek: function(jaris, data){
+			data._lastSeektime = jaris.seekTime;
+			
+			data.seeking = true;
+			$(data._elem).triggerHandler('seeking');
+			clearTimeout(data._seekedTimer);
+			data._seekedTimer = setTimeout(function(){
+				callSeeked(data);
+				data.seeking = false;
+			}, 300);
+		},
+		onConnectionFailed: function(){
+			webshims.error('media error');
 		},
 		onNotBuffering: function(jaris, data){
 			setReadyState(3, data);
@@ -3625,7 +3643,9 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 				setReadyState(3, data);
 				trigger(data._elem, 'playing');
 			}
-			
+			if(data.seeking){
+				callSeeked(data);
+			}
 			trigger(data._elem, 'timeupdate');
 		},
 		onProgress: function(jaris, data){
@@ -3681,6 +3701,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			
 			return function(jaris, data){
 				var i = 0;
+				
 				var doneFn = function(){
 					if(i > 9){
 						data.tryedReframeing = 0;
@@ -3840,11 +3861,12 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	
 	
 	var resetSwfProps = (function(){
-		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'videoHeight', 'videoWidth'];
+		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'seeking', 'videoHeight', 'videoWidth'];
 		var len = resetProtoProps.length;
 		return function(data){
 			
 			if(!data){return;}
+			clearTimeout(data._seekedTimer);
 			var lenI = len;
 			var networkState = data.networkState;
 			setReadyState(0, data);
@@ -4286,6 +4308,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			descs[key].set = setFn;
 		};
 		
+		createGetSetProp('seeking');
+		
 		createGetSetProp('volume', function(v){
 			var data = getSwfDataFromElem(this);
 			if(data){
@@ -4396,7 +4420,25 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		});
 		
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
+		
+		if(!Modernizr.mediaDefaultMuted){
+			webshims.defineNodeNameProperties(nodeName, {
+				defaultMuted: {
+					get: function(){
+						return $.attr(this, 'muted') != null;
+					},
+					set: function(val){
+						if(val){
+							$.attr(this, 'muted', '');
+						} else {
+							$(this).removeAttr('muted');
+						}
+					}
+				}
+			}, 'prop');
+		}
 	});
+	
 	
 	if(hasFlash && $.cleanData){
 		var oldClean = $.cleanData;

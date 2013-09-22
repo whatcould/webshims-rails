@@ -24,6 +24,7 @@
 	if(hasNative){
 		var videoElem = document.createElement('video');
 		Modernizr.videoBuffered = ('buffered' in videoElem);
+		Modernizr.mediaDefaultMuted = ('defaultMuted' in videoElem);
 		supportsLoop = ('loop' in videoElem);
 		
 		webshims.capturingEvents(['play', 'playing', 'waiting', 'paused', 'ended', 'durationchange', 'loadedmetadata', 'canplay', 'volumechange']);
@@ -37,20 +38,15 @@
 		
 		if(!options.preferFlash){
 			var noSwitch = {
-				1: 1,
-				2: 1
+				1: 1
 			};
 			var switchOptions = function(e){
 				var media, error, parent;
 				if(!options.preferFlash && 
 				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source:last', parent)[0] == e.target)) && 
-				(media = $(e.target).closest('audio, video')) && !noSwitch[(error = media.prop('error'))]
+				(media = $(e.target).closest('audio, video')) && (error = media.prop('error')) && !noSwitch[error.code]
 				){
-					if(error == null){
-						webshims.warn("There was an unspecified error on a mediaelement");
-						return;
-						
-					}
+					
 					$(function(){
 						if(hasSwf && !options.preferFlash){
 							loadSwf();
@@ -62,7 +58,7 @@
 										$('audio, video').each(function(){
 											webshims.mediaelement.selectSource(this);
 										});
-										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error'));
+										webshims.error("switching mediaelements option to 'preferFlash', due to an error with native player: "+e.target.src+" Mediaerror: "+ media.prop('error')+ 'first error: '+ error);
 									}
 								}, 9);
 							});
@@ -268,7 +264,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		if(src.indexOf('rtmp') === 0){
 			return nodeName+'/rtmp';
 		}
-		src = src.split('?')[0].split('.');
+		src = src.split('?')[0].split('#')[0].split('.');
 		src = src[src.length - 1];
 		var mt;
 		
@@ -387,7 +383,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			webshims.error('mediaelementError: '+ message);
 			setTimeout(function(){
 				if($(elem).data('mediaerror')){
-					$(elem).trigger('mediaerror');
+					$(elem).addClass('media-error').trigger('mediaerror');
 				}
 			}, 1);
 		}
@@ -451,6 +447,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var parent = elem.parentNode;
 		
 		clearTimeout(baseData.loadTimer);
+		$(elem).removeClass('media-error');
 		$.data(elem, 'mediaerror', false);
 		
 		if(!_srces.length || !parent || parent.nodeType != 1 || stopParent.test(parent.nodeName || '')){return;}
@@ -478,7 +475,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		var testFixMedia = function(){
 			if(webshims.implement(this, 'mediaelement')){
 				selectSource(this);
-				
+				if(!Modernizr.mediaDefaultMuted && $.attr(this, 'muted') != null){
+					$.prop(this, 'muted', true);
+				}
 				//fixes for FF 12 and IE9/10 || does not hurt, if run in other browsers
 				if(hasNative && (!supportsLoop || ('ActiveXObject' in window))){
 					var bufferTimer;
