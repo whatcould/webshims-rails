@@ -809,7 +809,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	webshims.assumeARIA = supportGetSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
-		webshims.error("IE browser modes are busted in IE10. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
+		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
 	}
 	
 	if(!$.parseHTML){
@@ -1362,7 +1362,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
 						$(document).on('updatelayout', this.handler);
-						$(window).bind('resize', this.handler);
+						$(window).on('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
 							var animationTimer;
@@ -1384,6 +1384,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			webshims.docObserve = function(){
 				webshims.ready('DOM', function(){
 					docObserve.start();
+					if($.support.boxSizing == null){
+						$(function(){
+							if($.support.boxSizing){
+								docObserve.handler({type: 'boxsizing'});
+							}
+						});
+					}
 				});
 			};
 			return function(nativeElem, shadowElem, opts){
@@ -1544,7 +1551,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			havePolyfill[prop] = true;
 						
 			if(descs.reflect){
-				webshims.propTypes[descs.propType || 'standard'](descs, prop);
+				if(descs.propType && !webshims.propTypes[descs.propType]){
+					webshims.error('could not finde propType '+ descs.propType);
+				} else {
+					webshims.propTypes[descs.propType || 'standard'](descs, prop);
+				}
+				
 			}
 			
 			['prop', 'attr', 'removeAttr'].forEach(function(type){
@@ -1730,7 +1742,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			var notLocal = /:\/\/|^\.*\//;
 			var loadRemoteLang = function(data, lang, options){
 				var langSrc;
-				if(lang && options && $.inArray(lang, options.availabeLangs || []) !== -1){
+				if(lang && options && $.inArray(lang, options.availableLangs || options.availabeLangs || []) !== -1){
 					data.loading = true;
 					langSrc = options.langSrc;
 					if(!notLocal.test(langSrc)){
@@ -1891,7 +1903,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	
 })(webshims.$, document);
 
-
 //JSON
 (function(){
 if('JSON'in window && JSON.stringify && JSON.parse){return;}
@@ -1904,7 +1915,7 @@ if(!this.JSON){this.JSON={};}(function(){function f(n){return n<10?'0'+n:n;}if(t
 //using window.name for sessionStorage and cookies for localStorage
 
 (function () {
-var $ = jQuery;	
+var $ = webshims.$ || jQuery;	
 if ('localStorage' in window && 'sessionStorage' in window) {
 	$.webshims.isReady('json-storage', true);
 	return;
