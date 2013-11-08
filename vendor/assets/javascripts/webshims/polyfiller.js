@@ -27,7 +27,7 @@
 	
 	
 	var webshims = {
-		version: '1.11.2',
+		version: '1.11.3',
 		cfg: {
 			
 			//addCacheBuster: false,
@@ -1010,7 +1010,7 @@
 //					,fieldWrapper: undefined
 //					,fx: 'slide'
 				},
-				availableLangs: ['ar', 'ch-ZN', 'el', 'es', 'fr', 'he', 'hi', 'hu', 'it', 'ja', 'lt', 'nl', 'pl', 'pt-PT', 'ru', 'sv'] //en and de are directly implemented in core
+				availableLangs: ['ar', 'ch-ZN', 'cs', 'el', 'es', 'fr', 'he', 'hi', 'hu', 'it', 'ja', 'lt', 'nl', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ru', 'sv'] //en and de are directly implemented in core
 	//			,customMessages: false,
 	//			overridePlaceholder: false, // might be good for IE10
 	//			replaceValidationUI: false
@@ -1176,7 +1176,6 @@
 			noAutoCallback: true,
 			options: {
 				preferFlash: false,
-				player: 'jaris',
 				vars: {},
 				params: {},
 				attrs: {},
@@ -1191,7 +1190,7 @@
 		
 		addPolyfill('mediaelement-jaris', {
 			f: 'mediaelement',
-			d: ['swfmini', DOMSUPPORT],
+			d: ['mediaelement-core', 'swfmini', DOMSUPPORT],
 			test: function(){
 				if(!Modernizr.audio || !Modernizr.video || webshims.mediaelement.loadSwf){
 					return false;

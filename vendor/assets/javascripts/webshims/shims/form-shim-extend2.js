@@ -577,6 +577,7 @@ try {
 }
 
 (function(){
+	if(options.noPlaceholderPolyfill){return;}
 	var bustedPlaceholder;
 	Modernizr.textareaPlaceholder = !!('placeholder' in $('<textarea />')[0]);
 	if(Modernizr.input.placeholder && options.overridePlaceholder){
@@ -759,7 +760,6 @@ try {
 				create: function(elem){
 					var data = $.data(elem, 'placeHolder');
 					var form;
-					var responsiveElem;
 					if(data){return data;}
 					data = $.data(elem, 'placeHolder', {});
 					
@@ -779,7 +779,6 @@ try {
 					if(elem.type == 'password' || isOver){
 						data.text = createPlaceholder(elem);
 						if(isResponsive || $(elem).is('.responsive-width') || (elem.currentStyle || {width: ''}).width.indexOf('%') != -1){
-							responsiveElem = true;
 							data.box = data.text;
 						} else {
 							data.box = $(elem)
@@ -1019,7 +1018,6 @@ try {
 					
 					//pro forma
 					,color: 1
-					//,range: 1
 				},
 				observe = function(input){
 					var timer,
@@ -1041,7 +1039,7 @@ try {
 							extraTimer = setTimeout(trigger, 9);
 						},
 						unbind = function(){
-							input.unbind('focusout', unbind).unbind('keyup keypress keydown paste cut', extraTest).unbind('input change updateInput', trigger);
+							input.unbind('focusout', unbind).unbind('keyup keypress keydown paste cut', extraTest).unbind('input change updateInput triggerinput', trigger);
 							clearInterval(timer);
 							setTimeout(function(){
 								trigger();
@@ -1057,7 +1055,7 @@ try {
 					input.on({
 						'keyup keypress keydown paste cut': extraTest,
 						focusout: unbind,
-						'input updateInput change': trigger
+						'input updateInput change triggerinput': trigger
 					});
 				}
 			;
