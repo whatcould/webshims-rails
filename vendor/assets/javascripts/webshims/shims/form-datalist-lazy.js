@@ -32,18 +32,18 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			var that = this;
 			this.hideList = $.proxy(that, 'hideList');
 			
-			
-			
-			this.popover = webshims.objectCreate(webshims.wsPopover, {}, options.datalistPopover);
-			this.shadowList = this.popover.element.addClass('datalist-polyfill');
-			
-			
 			this.index = -1;
 			this.input = opts.input;
 			this.arrayOptions = [];
 			
+			this._updateOptions();
+			
+			this.popover = webshims.objectCreate(webshims.wsPopover, {}, this.options.popover);
+			this.shadowList = this.popover.element.addClass('datalist-polyfill');
+			
 			this.shadowList
-				.delegate('li', 'mouseenter.datalistWidget mousedown.datalistWidget click.datalistWidget', function(e){
+				.on('mouseenter.datalistWidget mousedown.datalistWidget click.datalistWidget', 'li', function(e){
+					if(that._stopMouseOver && e && e.type == 'mouseenter'){return;}
 					var items = $('li:not(.hidden-item)', that.shadowList);
 					var select = (e.type == 'mousedown' || e.type == 'click');
 					that.markItem(items.index(e.currentTarget), select, items);
@@ -58,6 +58,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			;
 			
 			opts.input.setAttribute('autocomplete', 'off');
+			this.lastCompletedValue = "";
 			
 			$(opts.input)
 				.attr({
@@ -112,7 +113,8 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 						}
 					},
 					'focus.datalistWidget': function(){
-						if($(this).hasClass('list-focus')){
+						that.lastCompletedValue = "";
+						if(that.options.focus){
 							that.showList();
 						}
 					},
@@ -124,13 +126,12 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 				})
 			;
 			
-			
 			$(this.datalist)
 				.off('updateDatalist.datalistWidget')
 				.on('updateDatalist.datalistWidget', $.proxy(this, '_resetListCached'))
 				.on('remove', function(e){
 					if(!e.originalEvent){
-						that.detroy();
+						that.destroy();
 					}
 				})
 			;
@@ -175,17 +176,57 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 				}
 			}
 		},
+		_updateOptions: function(){
+			this.options = webshims.getOptions(this.input, 'list', options.list);
+			
+			if($(this.input).prop('multiple') && $(this.input).prop('type') == 'email'){
+				this.options.multiple = true;
+			}
+			
+			if( this.options.getOptionContent && !$.isFunction(this.options.getOptionContent) ){
+				this.options.getOptionContent = false;	
+			}
+			
+			//depreacated option settings:
+			if(options.getOptionContent){
+				webshims.error('getOptionContent is depreacated use $(input).on("getoptioncontent")');
+			}
+			
+			if($(this.input).hasClass('list-focus')){
+				webshims.error(".list-focus is depreacated. Use focus option.");
+			}
+			
+			if(options.datalistPopover && !this.options.popover){
+				this.options.popover = options.datalistPopover;
+				webshims.error("datalistPopover is depreacated. Use popover option.");
+			}
+			
+			if($(this.input).hasClass('mark-option-text')){
+				this.options.highlight = true;
+				webshims.error(".mark-option-text is depreacated. Use highlight option.");
+			}
+			
+			if($(this.input).hasClass('list-multiple')){
+				this.options.multiple = true;
+				webshims.error(".list-multiple is depreacated. Use multiple option.");
+			}
+			
+			if($(this.input).hasClass('value-completion')){
+				this.options.valueCompletion = true;
+				webshims.error(".value-completion is depreacated. Use valueCompletion option.");
+			}
+			
+			if(this.options.valueCompletion && this.options.multiple){
+				webshims.warn("valueCompletion and multiple shouldn't be set together");
+			}
+		},
 		updateListOptions: function(_forceShow){
 			this.needsUpdate = false;
 			clearTimeout(this.updateTimer);
 			this.updateTimer = false;
 			
-			if($(this.input).hasClass('ws-nosearch') || $(this.input).hasClass('search-start')){
-				webshims.error('please use listFilter/data-list-filer configuration with values: "*", "^" or "!"');
-			}
-			this.addMarkElement = options.addMark || $(this.input).hasClass('mark-option-text');
-			this.listFilter = $(this.input).data('listFilter') || options.listFilter || '*';
-			this.multiple = $(this.input).hasClass('list-multiple') || ($(this.input).prop('multiple') && $(this.input).prop('type') == 'email');
+			this.lastCompletedValue = "";
+			
 			var list = [];
 			
 			var values = [];
@@ -195,7 +236,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 				rElem = rOptions[rI];
 				if(!rElem.disabled && (value = $(rElem).val())){
 					rItem = {
-						value: value.replace(lReg, '&lt;').replace(gReg, '&gt;'),
+						value: this.options.noHtmlEscape ? value : value.replace(lReg, '&lt;').replace(gReg, '&gt;'),
 						label: $.trim($.attr(rElem, 'label')) || '',
 						className: rElem.className || '',
 						elem: options.getOptionContent ? rElem : null
@@ -237,11 +278,9 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 		},
 		getOptionContent: function(item){
 			var content;
-			if(options.getOptionContent){
-				content = options.getOptionContent.apply(this, arguments);
-				if(content != null){
-					content += '<span class="option-value" style="display: none;">'+ item.value +'</span>'
-				}
+			var args = [{instance: this, item: item}];
+			if( ( content = $(this.input).triggerHandler('getoptioncontent', args) || (this.options.getOptionContent && this.options.getOptionContent.apply(this.input, args)) ) && content.indexOf && content.indexOf('option-value') == -1 ){
+				content += '<span class="option-value" style="display: none;">'+ item.value +'</span>';
 			} 
 			if(content == null){
 				content = '<span class="option-value">'+ item.value +'</span>';
@@ -251,15 +290,51 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			}
 			return content || '';
 		},
+		setCompletedValue: function(value, foundItem){
+			
+			if(!this.options.valueCompletion || !foundItem || this.lastCompletedValue.length >= value.length ){
+				this.lastCompletedValue = value;
+				return;
+			}
+			
+			var newValue;
+			var input = this.input;
+			var end = $.prop(input, 'selectionEnd');
+			
+			this.lastCompletedValue = value;
+			
+			if(value.length == end){
+				
+				newValue = value + foundItem.value.substr(value.length);
+				
+				$(input).triggerHandler('triggerinput');
+				$.prop(input, 'value', newValue);
+				$(input).triggerHandler('updateInput');
+				$(input).callProp('setSelectionRange', [value.length, newValue.length]);
+				
+				//safari workaround || needs more investigation
+				setTimeout(function(){
+					if(newValue == $.prop(input, 'value') && $.prop(input, 'selectionEnd') != newValue.length){
+						$.prop(input, 'selectionEnd', newValue.length);
+					}
+				}, 0);
+				
+			}
+		},
 		showHideOptions: function(_fromShowList){
-			var value = $.prop(this.input, 'value').toLowerCase();
-
+			var lis, firstFoundValue;
+			var inputValue = $.prop(this.input, 'value');
+			var value = inputValue.toLowerCase();
+			var found = false;
+			var startSearch = this.options.filter == '^';
+			var that = this;
+			
 			//first check prevent infinite loop, second creates simple lazy optimization
 			if(value === this.lastUpdatedValue){
 				return;
 			}
 			
-			if(this.multiple){
+			if(this.options.multiple){
 				value = value.split(splitReg);
 				value = value[value.length - 1] || '';
 			}
@@ -271,13 +346,11 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			
 			
 			this.lastUpdatedValue = value;
-			var found = false;
-			var startSearch = this.listFilter == '^';
-			var lis = $('li', this.shadowList);
-			var that = this;
+			lis = $('li', this.shadowList);
 			
 			
-			if(value && this.listFilter != '!'){
+			
+			if(value && this.options.filter != '!'){
 				
 				
 				this.arrayOptions.forEach(function(item, i){
@@ -294,6 +367,9 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 						search = startSearch ? !searchIndex : searchIndex !== -1;
 						if(search){
 							foundName = 'value';
+							if(!firstFoundValue && !searchIndex){
+								firstFoundValue = item;
+							}
 						} else if(item.lowerLabel){
 							searchIndex = item.lowerLabel.indexOf(value);
 							search = startSearch ? !searchIndex : searchIndex !== -1;
@@ -316,7 +392,11 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			this.hasViewableData = found;
 			if(!_fromShowList && found){
 				if(this.popover.isVisible && this.popover.element.attr('data-vertical') == 'bottom'){
+					that._stopMouseOver = true;
 					this.popover.element.triggerHandler('pospopover');
+					setTimeout(function(){
+						that._stopMouseOver = false;
+					}, 9);
 				}
 				this.showList();
 			}
@@ -325,6 +405,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 				this.lastUnfoundValue = value;
 				this.hideList();
 			} else {
+				this.setCompletedValue(inputValue, firstFoundValue);
 				this.lastUnfoundValue = false;
 			}
 		},
@@ -333,7 +414,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			label: 'value'
 		},
 		addMark: function(elem, item, prop, start, length){
-			if(this.addMarkElement){
+			if(this.options.highlight){
 				var text = item[prop].substr(start, length);
 				text = item[prop].replace(text ,'<mark>'+ text +'</mark>');
 				$('.option-'+ this.otherType[prop] +' > mark', elem).each(this._replaceMark);
@@ -346,7 +427,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			$(this).replaceWith(content);
 		},
 		removeMark: function(lis){
-			if(this.addMarkElement){
+			if(this.options.highlight){
 				$('mark', lis).each(this._replaceMark);
 			}
 		},
@@ -404,7 +485,7 @@ webshims.register('form-datalist-lazy', function($, webshims, window, document, 
 			var newValue = $('span.option-value', activeItem).text();
 			var oldValue = $.prop(this.input, 'value');
 			
-			if(this.multiple){
+			if(this.options.multiple){
 				tmpValue = oldValue.split(splitReg);
 				tmpValue[tmpValue.length - 1] = newValue;
 				

@@ -10,8 +10,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
 	}
 	
-	if(!$.parseHTML){
-		webshims.error("Webshims needs jQuery 1.8+ to work properly. Please update your jQuery version or downgrade webshims.");
+	if('debug' in webshims){
+		webshims.error('Use webshims.setOptions("debug", true||false||"noCombo"); to debug flag');
 	}
 	
 	if (!webshims.cfg.no$Switch) {
@@ -47,7 +47,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 //			'127.0.0.1': 1
 //		};
 //		
-//		if( webshims.debug && (hostNames[location.hostname] || location.protocol == 'file:') ){
+//		if( webshims.cfg.debug && (hostNames[location.hostname] || location.protocol == 'file:') ){
 //			var list = $('<ul class="webshims-debug-list" />');
 //			webshims.errorLog.push = function(message){
 //				list.appendTo('body');
@@ -479,7 +479,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	$.extend(webshims, {
-
 		getID: (function(){
 			var ID = new Date().getTime();
 			return function(elem){
@@ -509,6 +508,51 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				}
 			});
 		},
+		getOptions: (function(){
+			var regs = {};
+			var regFn = function(f, upper){
+				return upper.toLowerCase();
+			};
+			return function(elem, name, bases){
+				var data = elementData(elem, 'cfg'+name);
+				var dataName;
+				var cfg = {};
+				
+				if(data){
+					return data;
+				}
+				data = $(elem).data();
+				
+				if(!bases){
+					bases = [true, {}];
+				} else if(!Array.isArray(bases)){
+					bases = [true, {}, bases];
+				} else {
+					bases.unshift(true, {});
+				}
+				
+				if(data && data[name]){
+					if(typeof data[name] == 'object'){
+						bases.push(data[name]);
+					} else {
+						webshims.error('data-'+ name +' attribute has to be a valid JSON, was: '+ data[name]);
+					}
+				}
+				
+				if(!regs[name]){
+					regs[name] = new RegExp('^'+ name +'([A-Z])');
+				}
+				
+				for(dataName in data){
+					if(regs[name].test(dataName)){
+						cfg[dataName.replace(regs[name], regFn)] = data[dataName];
+					}
+				}
+				bases.push(cfg);
+				
+				return elementData(elem, 'cfg'+name, $.extend.apply($, bases));
+			};
+		})(),
 		//http://www.w3.org/TR/html5/common-dom-interfaces.html#reflect
 		createPropDefault: createPropDefault,
 		data: elementData,
@@ -596,7 +640,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						setInterval(this.test, 600);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
-						$(document).on('updatelayout', this.handler);
+						$(document).on('updatelayout pageinit collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
 						$(window).on('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -954,109 +998,67 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			}
 		},
 		
-//		set current Lang:
-//			- webshims.activeLang(lang:string);
-//		get current lang
-//			- webshims.activeLang();
-//		get current lang
-//			webshims.activeLang({
-//				register: moduleName:string,
-//				callback: callback:function
-//			});
-//		get/set including remoteLang
-//			- webshims.activeLang({
-//				module: moduleName:string,
-//				callback: callback:function,
-//				langObj: languageObj:array/object
-//			});
 		activeLang: (function(){
-			var callbacks = [];
-			var registeredCallbacks = {};
-			var currentLang;
-			var shortLang;
-			var notLocal = /:\/\/|^\.*\//;
-			var loadRemoteLang = function(data, lang, options){
-				var langSrc;
-				if(lang && options && $.inArray(lang, options.availableLangs || options.availabeLangs || []) !== -1){
-					data.loading = true;
-					langSrc = options.langSrc;
-					if(!notLocal.test(langSrc)){
-						langSrc = webshims.cfg.basePath+langSrc;
-					}
-					webshims.loader.loadScript(langSrc+lang+'.js', function(){
-						if(data.langObj[lang]){
-							data.loading = false;
-							callLang(data, true);
-						} else {
-							$(function(){
-								if(data.langObj[lang]){
-									callLang(data, true);
-								}
-								data.loading = false;
+			var curLang = [];
+			var langDatas = [];
+			var loading = {};
+			var load = function(src, obj, loadingLang){
+				obj._isLoading = true;
+				if(loading[src]){
+					loading[src].push(obj);
+				} else {
+					loading[src] = [obj];
+					webshims.loader.loadScript(src, function(){
+						if(loadingLang == curLang.join()){
+							$.each(loading[src], function(i, obj){
+								select(obj);
 							});
 						}
-					});
-					return true;
-				}
-				return false;
-			};
-			var callRegister = function(module){
-				if(registeredCallbacks[module]){
-					registeredCallbacks[module].forEach(function(data){
-						data.callback(currentLang, shortLang, '');
+						delete loading[src];
 					});
 				}
 			};
-			var callLang = function(data, _noLoop){
-				if(data.activeLang != currentLang && data.activeLang !== shortLang){
-					var options = modules[data.module].options;
-					if( data.langObj[currentLang] || (shortLang && data.langObj[shortLang]) ){
-						data.activeLang = currentLang;
-						data.callback(data.langObj[currentLang] || data.langObj[shortLang], currentLang);
-						callRegister(data.module);
-					} else if( !_noLoop &&
-						!loadRemoteLang(data, currentLang, options) && 
-						!loadRemoteLang(data, shortLang, options) && 
-						data.langObj[''] && data.activeLang !== '' ) {
-						data.activeLang = '';
-						data.callback(data.langObj[''], currentLang);
-						callRegister(data.module);
+			var select = function(obj){
+				var oldLang = obj.__active;
+				var selectLang = function(i, lang){
+					obj._isLoading = false;
+					if(obj[lang] || obj.availableLangs.indexOf(lang) != -1){
+						if(obj[lang]){
+							obj.__active = obj[lang];
+						} else {
+							load(obj.langSrc+lang, obj, curLang.join());
+						}
+						return false;
 					}
+				};
+				$.each(curLang, selectLang);
+				if(!obj.__active){
+					obj.__active = obj[''];
+				}
+				if(oldLang != obj.__active){
+					$(obj).trigger('change');
 				}
 			};
-			
-			
-			var activeLang = function(lang){
-				
-				if(typeof lang == 'string' && lang !== currentLang){
-					currentLang = lang;
-					shortLang = currentLang.split('-')[0];
-					if(currentLang == shortLang){
-						shortLang = false;
+			return function(lang){
+				var shortLang;
+				if(typeof lang == 'string'){
+					if(curLang[0] != lang){
+						curLang = [lang];
+						shortLang = curLang[0].split('-')[0];
+						if(shortLang && shortLang != lang){
+							curLang.push(shortLang);
+						}
+						langDatas.forEach(select);
 					}
-					$.each(callbacks, function(i, data){
-						callLang(data);
-					});
 				} else if(typeof lang == 'object'){
-					
-					if(lang.register){
-						if(!registeredCallbacks[lang.register]){
-							registeredCallbacks[lang.register] = [];
-						}
-						registeredCallbacks[lang.register].push(lang);
-						lang.callback(currentLang, shortLang, '');
-					} else {
-						if(!lang.activeLang){
-							lang.activeLang = '';
-						}
-						callbacks.push(lang);
-						callLang(lang);
+					if(!lang.__active){
+						langDatas.push(lang);
+						select(lang);
 					}
+					return lang.__active;
 				}
-				return currentLang;
+				return curLang[0];
 			};
-			
-			return activeLang;
 		})()
 	});
 	
@@ -1200,38 +1202,64 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		return ret;
 	};
 	
-	$.extend($.expr[":"], {
-		"valid-element": function(elem){
-			return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
-		},
-		"invalid-element": function(elem){
-			return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
-		},
-		"required-element": function(elem){
-			return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required'));
-		},
-		"user-error": function(elem){
-			return ($.prop(elem, 'willValidate') && $(elem).hasClass('user-error'));
-		},
-		"optional-element": function(elem){
-			return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required') === false);
+	var extendSels = function(){
+		var exp = $.expr[":"];
+		$.extend(exp, {
+			"valid-element": function(elem){
+				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
+			},
+			"invalid-element": function(elem){
+				return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
+			},
+			"required-element": function(elem){
+				return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required'));
+			},
+			"user-error": function(elem){
+				return ($.prop(elem, 'willValidate') && $(elem).hasClass('user-error'));
+			},
+			"optional-element": function(elem){
+				return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required') === false);
+			}
+		});
+		
+		['valid', 'invalid', 'required', 'optional'].forEach(function(name){
+			exp[name] = $.expr[":"][name+"-element"];
+		});
+		
+		// sizzle/jQuery has a bug with :disabled/:enabled selectors
+		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><fieldset>').find('input').is(':disabled')){
+			$.extend(exp, {
+				"enabled": function( elem ) {
+					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
+				},
+		
+				"disabled": function( elem ) {
+					return elem.disabled === true || ('disabled' in elem && $(elem).is('fieldset[disabled] *'));
+				}
+			});
 		}
-	});
-	
-	['valid', 'invalid', 'required', 'optional'].forEach(function(name){
-		$.expr[":"][name] = $.expr.filters[name+"-element"];
-	});
-	
-	//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used) 
-	var pseudoFocus = $.expr[":"].focus;
-	$.expr[":"].focus = function(){
-		try {
-			return pseudoFocus.apply(this, arguments);
-		} catch(e){
-			webshims.error(e);
+		
+		
+		//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used)
+		if(typeof document.activeElement == 'unknown'){
+			var pseudoFocus = exp.focus;
+			exp.focus = function(){
+				try {
+					return pseudoFocus.apply(this, arguments);
+				} catch(e){
+					webshims.error(e);
+				}
+				return false;
+			};
 		}
-		return false;
 	};
+	
+	if($.expr.filters){
+		extendSels();
+	} else {
+		webshims.ready('sizzle', extendSels);
+	}
+	
 	
 	webshims.triggerInlineForm = function(elem, event){
 		$(elem).trigger(event);
@@ -1300,7 +1328,10 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	webshims.getContentValidationMessage = function(elem, validity, key){
-		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
+		if(webshims.errorbox && webshims.errorbox.initIvalContentMessage){
+			webshims.errorbox.initIvalContentMessage(elem);
+		}
+		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage') : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
 		} else if(message) {
@@ -1346,7 +1377,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
-		if('form' in e.target && (e.target.list || $(e.target).is(':invalid'))){
+		if('form' in e.target){
 			lazyLoad();
 		}
 	});
@@ -1360,7 +1391,6 @@ webshims.inputTypes = webshims.inputTypes || {};
 //some helper-functions
 var cfg = webshims.cfg.forms;
 var bugs = webshims.bugs;
-var isSubmit;
 
 var isNumber = function(string){
 		return (typeof string == 'number' || (string && string == string * 1));
@@ -1435,6 +1465,7 @@ var validityPrototype = {
 	rangeOverflow: false,
 	stepMismatch: false,
 	tooLong: false,
+	tooShort: false,
 	patternMismatch: false,
 	valueMissing: false,
 	
@@ -1471,6 +1502,9 @@ var getGroupElements = function(elem){
 	}
 	return ret;
 };
+var patternTypes = {url: 1, email: 1, text: 1, search: 1, tel: 1, password: 1};
+var lengthTypes = $.extend({textarea: 1}, patternTypes);
+
 var validityRules = {
 		valueMissing: function(input, val, cache){
 			if(!input.prop('required')){return false;}
@@ -1487,11 +1521,12 @@ var validityRules = {
 			}
 			return ret;
 		},
-		tooLong: function(){
-			return false;
-		},
 		patternMismatch: function(input, val, cache) {
 			if(val === '' || cache.nodeName == 'select'){return false;}
+			if(!('type' in cache)){
+				cache.type = getType(input[0]);
+			}
+			if(!patternTypes[cache.type]){return false;}
 			var pattern = input.attr('pattern');
 			if(!pattern){return false;}
 			try {
@@ -1505,6 +1540,20 @@ var validityRules = {
 		}
 	}
 ;
+
+$.each({tooShort: ['minLength', -1], tooLong: ['maxLength', 1]}, function(name, props){
+	validityRules[name] = function(input, val, cache){
+		//defaultValue is not the same as dirty flag, but very similiar
+		if(cache.nodeName == 'select' || input.prop('defaultValue') == val){return false;}
+		if(!('type' in cache)){
+			cache.type = getType(input[0]);
+		}
+		if(!lengthTypes[cache.type]){return false;}
+		var prop = input.prop(props[0]);
+		
+		return ( prop > 0 && prop * props[1] < val.length * props[1] );
+	};
+});
 
 $.each({typeMismatch: 'mismatch', badInput: 'bad'}, function(name, fn){
 	validityRules[name] = function (input, val, cache){
@@ -1556,15 +1605,12 @@ $.event.special.invalid = {
 		
 		if( e.type != 'submit' || e.testedValidity || !e.originalEvent || !$.nodeName(e.target, 'form') || $.prop(e.target, 'noValidate') ){return;}
 		
-		isSubmit = true;
 		e.testedValidity = true;
-		var notValid = !($(e.target).checkValidity());
+		var notValid = !($(e.target).callProp('reportValidity'));
 		if(notValid){
 			e.stopImmediatePropagation();
-			isSubmit = false;
 			return false;
 		}
-		isSubmit = false;
 	}
 };
 
@@ -1631,6 +1677,9 @@ webshims.defineNodeNamesProperties(['button', 'fieldset', 'output'], {
 	checkValidity: {
 		value: function(){return true;}
 	},
+	reportValidity: {
+		value: function(){return true;}
+	},
 	willValidate: {
 		value: false
 	},
@@ -1645,7 +1694,7 @@ webshims.defineNodeNamesProperties(['button', 'fieldset', 'output'], {
 	}
 }, 'prop');
 
-var baseCheckValidity = function(elem){
+var baseCheckValidity = function(elem, type){
 	var e,
 		v = $.prop(elem, 'validity')
 	;
@@ -1657,7 +1706,7 @@ var baseCheckValidity = function(elem){
 	if( !v.valid ){
 		e = $.Event('invalid');
 		var jElm = $(elem).trigger(e);
-		if(isSubmit && !baseCheckValidity.unhandledInvalids && !e.isDefaultPrevented()){
+		if(type == 'reportValidity' && !baseCheckValidity.unhandledInvalids && !e.isDefaultPrevented()){
 			webshims.validityAlert.showFor(jElm);
 			baseCheckValidity.unhandledInvalids = true;
 		}
@@ -1666,95 +1715,111 @@ var baseCheckValidity = function(elem){
 	return v.valid;
 };
 var rsubmittable = /^(?:select|textarea|input)/i;
-webshims.defineNodeNameProperty('form', 'checkValidity', {
-	prop: {
-		value: function(){
-			
-			var ret = true,
-				elems = $($.prop(this, 'elements')).filter(function(){
-					if(!rsubmittable.test(this.nodeName)){return false;}
-					var shadowData = webshims.data(this, 'shadowData');
-					return !shadowData || !shadowData.nativeElement || shadowData.nativeElement === this;
-				})
-			;
-			
-			baseCheckValidity.unhandledInvalids = false;
-			for(var i = 0, len = elems.length; i < len; i++){
-				if( !baseCheckValidity(elems[i]) ){
-					ret = false;
+
+['checkValidity', 'reportValidity'].forEach(function(name){
+	webshims.defineNodeNameProperty('form', name, {
+		prop: {
+			value: function(){
+				
+				var ret = true,
+					elems = $($.prop(this, 'elements')).filter(function(){
+						if(!rsubmittable.test(this.nodeName)){return false;}
+						var shadowData = webshims.data(this, 'shadowData');
+						return !shadowData || !shadowData.nativeElement || shadowData.nativeElement === this;
+					})
+				;
+				
+				baseCheckValidity.unhandledInvalids = false;
+				for(var i = 0, len = elems.length; i < len; i++){
+					if( !baseCheckValidity(elems[i], name) ){
+						ret = false;
+					}
 				}
+				return ret;
 			}
-			return ret;
 		}
-	}
+	});
 });
 
-webshims.defineNodeNamesProperties(['input', 'textarea', 'select'], {
-	checkValidity: {
-		value: function(){
-			baseCheckValidity.unhandledInvalids = false;
-			return baseCheckValidity($(this).getNativeElement()[0]);
-		}
-	},
-	setCustomValidity: {
-		value: function(error){
-			$.removeData(this, 'cachedValidity');
-			webshims.data(this, 'customvalidationMessage', ''+error);
-		}
-	},
-	willValidate: {
-		writeable: false,
-		get: (function(){
-			var types = {
-					button: 1,
-					reset: 1,
-					hidden: 1,
-					image: 1
+
+
+
+['input', 'textarea', 'select'].forEach(function(nodeName){
+	var inputValidationAPI = {
+		setCustomValidity: {
+			value: function(error){
+				$.removeData(this, 'cachedValidity');
+				webshims.data(this, 'customvalidationMessage', ''+error);
+				if(bugs.bustedValidity && inputValidationAPI.setCustomValidity.prop._supvalue){
+					inputValidationAPI.setCustomValidity.prop._supvalue.apply(this, arguments);
 				}
-			;
-			return function(){
-				var elem = $(this).getNativeElement()[0];
-				//elem.name && <- we don't use to make it easier for developers
-				return !!(!elem.disabled && !elem.readOnly && !types[elem.type] );
-			};
-		})()
-	},
-	validity: {
-		writeable: false,
-		get: function(){
-			var jElm = $(this).getNativeElement();
-			var elem = jElm[0];
-			var validityState = $.data(elem, 'cachedValidity');
-			if(validityState){
-				return validityState;
 			}
-			validityState 	= $.extend({}, validityPrototype);
-			
-			if( !$.prop(elem, 'willValidate') || elem.type == 'submit' ){
-				return validityState;
-			}
-			var val 	= jElm.val(),
-				cache 	= {nodeName: elem.nodeName.toLowerCase()}
-			;
-			
-			validityState.customError = !!(webshims.data(elem, 'customvalidationMessage'));
-			if( validityState.customError ){
-				validityState.valid = false;
-			}
-							
-			$.each(validityRules, function(rule, fn){
-				if (fn(jElm, val, cache)) {
-					validityState[rule] = true;
+		},
+		willValidate: {
+			writeable: false,
+			get: (function(){
+				var types = {
+						button: 1,
+						reset: 1,
+						hidden: 1,
+						image: 1
+					}
+				;
+				return function(){
+					var elem = $(this).getNativeElement()[0];
+					return !!(!elem.readOnly && !types[elem.type] && !$(elem).is(':disabled') );
+				};
+			})()
+		},
+		validity: {
+			writeable: false,
+			get: function(){
+				var jElm = $(this).getNativeElement();
+				var elem = jElm[0];
+				var validityState = $.data(elem, 'cachedValidity');
+				if(validityState){
+					return validityState;
+				}
+				validityState 	= $.extend({}, validityPrototype);
+				
+				if( !$.prop(elem, 'willValidate') || elem.type == 'submit' ){
+					return validityState;
+				}
+				var val 	= jElm.val(),
+					cache 	= {nodeName: elem.nodeName.toLowerCase()}
+				;
+				
+				validityState.customError = !!(webshims.data(elem, 'customvalidationMessage'));
+				if( validityState.customError ){
 					validityState.valid = false;
 				}
-			});
-			$(this).getShadowFocusElement().attr('aria-invalid',  validityState.valid ? 'false' : 'true');
-			jElm = null;
-			elem = null;
-			return validityState;
+								
+				$.each(validityRules, function(rule, fn){
+					if (fn(jElm, val, cache)) {
+						validityState[rule] = true;
+						validityState.valid = false;
+					}
+				});
+				$(this).getShadowFocusElement().attr('aria-invalid',  validityState.valid ? 'false' : 'true');
+				jElm = null;
+				elem = null;
+				return validityState;
+			}
 		}
-	}
-}, 'prop');
+	};
+	
+	['checkValidity', 'reportValidity'].forEach(function(name){
+		inputValidationAPI[name] = {
+			value: function(){
+				baseCheckValidity.unhandledInvalids = false;
+				return baseCheckValidity($(this).getNativeElement()[0], name);
+			}
+		}
+	});
+	
+	webshims.defineNodeNameProperties(nodeName, inputValidationAPI, 'prop');
+});
+
 
 webshims.defineNodeNamesBooleanProperty(['input', 'textarea', 'select'], 'required', {
 	set: function(value){
@@ -1764,7 +1829,7 @@ webshims.defineNodeNamesBooleanProperty(['input', 'textarea', 'select'], 'requir
 });
 webshims.defineNodeNamesBooleanProperty(['input'], 'multiple');
 
-if(webshims.bugs.bustedValidity){
+if(bugs.bustedValidity){
 	
 	webshims.defineNodeNameProperty('form', 'novalidate', {
 		attr: {
@@ -1806,6 +1871,22 @@ webshims.defineNodeNameProperty('form', 'noValidate', {
 		}
 	}
 });
+
+webshims.defineNodeNamesProperty(['input', 'textarea'], 'minLength', {
+		prop: {
+			set: function(val){
+				val *= 1;
+				if(val < 0){
+					throw('INDEX_SIZE_ERR');
+				}
+				this.setAttribute('minlength', val || 0);
+			},
+			get: function(){
+				var val = this.getAttribute('minlength');
+				return val == null ? -1 : (val * 1) || 0;
+			}
+		}
+})
 
 if(Modernizr.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 	(function(){
@@ -1861,7 +1942,7 @@ if(Modernizr.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 								focusedin = false;
 							}
 							if(input){
-								input.unbind('focusout blur', unbind).unbind('input change updateInput', trigger);
+								input.off('focusout blur', unbind).off('input change updateInput', trigger);
 								trigger();
 							}
 							input = null;
@@ -1904,7 +1985,7 @@ webshims.addReady(function(context, contextElem){
 	var focusElem;
 	$('form', context)
 		.add(contextElem.filter('form'))
-		.bind('invalid', $.noop)
+		.on('invalid', $.noop)
 	;
 	
 	try {
@@ -2080,7 +2161,7 @@ switch(desc.proptype) {
 	formSubmitterDescriptors[attrName].attr = {
 		set: function(value){
 			formSubmitterDescriptors[attrName].attr._supset.call(this, value);
-			$(this).unbind(eventName).on(eventName, changeSubmitter);
+			$(this).off(eventName).on(eventName, changeSubmitter);
 		},
 		get: function(){
 			return formSubmitterDescriptors[attrName].attr._supget.call(this);
@@ -2089,7 +2170,7 @@ switch(desc.proptype) {
 	formSubmitterDescriptors[attrName].initAttr = true;
 	formSubmitterDescriptors[attrName].removeAttr = {
 		value: function(){
-			$(this).unbind(eventName);
+			$(this).off(eventName);
 			formSubmitterDescriptors[attrName].removeAttr._supvalue.call(this);
 		}
 	};
@@ -2131,6 +2212,7 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		},
 		stepMismatch: 'Invalid input.',
 		tooLong: 'Please enter at most {%maxlength} character(s). You entered {%valueLen}.',
+		tooShort: 'Please enter at least {%minlength} character(s). You entered {%valueLen}.',
 		patternMismatch: 'Invalid input. {%title}',
 		valueMissing: {
 			defaultMessage: 'Please fill out this field.',
@@ -2187,6 +2269,7 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		},
 		stepMismatch: 'Der Wert {%value} ist in diesem Feld nicht zulässig. Hier sind nur bestimmte Werte zulässig. {%title}',
 		tooLong: 'Der eingegebene Text ist zu lang! Sie haben {%valueLen} Zeichen eingegeben, dabei sind {%maxlength} das Maximum.',
+		tooShort: 'Der eingegebene Text ist zu kurz! Sie haben {%valueLen} Zeichen eingegeben, dabei sind {%minlength} das Minimum.',
 		patternMismatch: '{%value} hat für dieses Eingabefeld ein falsches Format. {%title}',
 		valueMissing: {
 			defaultMessage: 'Bitte geben Sie einen Wert ein.',
@@ -2238,7 +2321,7 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+webshims.activeLang());
 		}
 		if(message){
-			['value', 'min', 'max', 'title', 'maxlength', 'label'].forEach(function(attr){
+			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
 				if(message.indexOf('{%'+attr) === -1){return;}
 				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
 				if(name == 'patternMismatch' && attr == 'title' && !val){
@@ -2268,20 +2351,10 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		implementProperties.push('validationMessage');
 	}
 	
-	webshims.activeLang({
-		langObj: validityMessages, 
-		module: 'form-core',
-		callback: function(langObj){
-			currentValidationMessage = langObj;
-		}
-	});
-	webshims.activeLang({
-		register: 'form-core',
-		callback: function(val){
-			if(validityMessages[val]){
-				currentValidationMessage = validityMessages[val];
-			}
-		}
+	currentValidationMessage = webshims.activeLang(validityMessages);
+		
+	$(validityMessages).on('change', function(e, data){
+		currentValidationMessage = validityMessages.__active;
 	});
 	
 	implementProperties.forEach(function(messageProp){
@@ -2616,7 +2689,9 @@ webshims.register('form-datalist', function($, webshims, window, document, undef
 			noAutoCallback: true,
 			options: $.extend(options, {shadowListProto: shadowListProto})
 		});
-		
+		if(!options.list){
+			options.list = {};
+		}
 		//init datalist update
 		initializeDatalist();
 	})();

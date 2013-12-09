@@ -9,6 +9,9 @@
 	}
 }(function($){
 	"use strict";
+	if (typeof WSDEBUG === 'undefined') {
+		window.WSDEBUG = true;
+	}
 	var DOMSUPPORT = 'dom-support';
 	var jScripts = $(document.scripts || 'script');
 	var special = $.event.special;
@@ -18,6 +21,7 @@
 	var addTest = Modernizr.addTest;
 	var Object = window.Object;
 	var html5 = window.html5 || {};
+	var firstRun;
 	
 	Modernizr.advancedObjectProperties = Modernizr.objectAccessor = Modernizr.ES5 = !!('create' in Object && 'seal' in Object);
 	
@@ -27,7 +31,7 @@
 	
 	
 	var webshims = {
-		version: '1.11.3',
+		version: '1.11.6',
 		cfg: {
 			
 			//addCacheBuster: false,
@@ -36,6 +40,7 @@
 			loadStyles: true,
 			disableShivMethods: true,
 			wspopover: {appendTo: 'auto', hideOnBlur: true},
+			ajax: {cache: true, crossDomain: true},
 			basePath: (function(){
 				var script = jScripts.filter('[src*="polyfiller.js"]');
 				var path;
@@ -78,10 +83,10 @@
 			}
 			
 			if(webshimsFeatures[feature].failedM){
-				cfg.test = function(){
+				cfg.test = WSDEBUG ? function(){
 					webshims.error('webshims needs Modernizr.'+webshimsFeatures[feature].failedM + ' to implement feature: '+ feature);
 					return true;
-				};
+				} : true;
 			}
 			webshimsFeatures[feature].push(name);
 			cfg.options = $.extend(webCFG[feature], cfg.options);
@@ -98,99 +103,62 @@
 			return function(features){
 				if(!features){
 					features = webshims.featureList;
-					webshims.info('loading all features without specifing might be bad for performance');
+					WSDEBUG && webshims.warn('loading all features without specifing might be bad for performance');
 				}
 					
 				if (typeof features == 'string') {
 					features = features.split(' ');
 				}
 				
-				for(var i = 0; i < features.length; i++){
-					if(loaded[features[i]]){
-						webshims.error(features[i] +' already loaded, you might want to use updatePolyfill instead? see: bit.ly/12BtXX3');
+				if(WSDEBUG){
+					for(var i = 0; i < features.length; i++){
+						if(loaded[features[i]]){
+							webshims.error(features[i] +' already loaded, you might want to use updatePolyfill instead? see: bit.ly/12BtXX3');
+						}
+						loaded[features[i]] = true;
 					}
-					loaded[features[i]] = true;
 				}
 				return webshims._polyfill(features);
 			};
 		})(),
-		_polyfill: (function(){
-			var firstPolyfillCall = function(features){
-				var addClass = [];
-				var onReadyEvts = features;
-				var timer;
-				
-				if(webCFG.disableShivMethods){
-					html5.shivMethods = false;
+		_polyfill: function(features){
+			var toLoadFeatures = [];
+			
+			firstRun();
+			
+			if($.inArray('forms', features) == -1 && $.inArray('forms-ext', features) !== -1){
+				features.push('forms');
+				if(WSDEBUG){
+					webshims.error('need to load forms feature to use forms-ext feature.');
 				}
-				
-				var removeLoader = function(){
-					$('html').removeClass('loading-polyfills long-loading-polyfills');
-					$(window).unbind('.lP');
-					clearTimeout(timer);
-				};
-				
-				
-				
-				addClass.push('loading-polyfills');
-				timer = setTimeout(function(){
-					$('html').addClass('long-loading-polyfills');
-					timer = setTimeout(removeLoader, 300);
-				}, 300);
-				$(window).on('load.lP error.lP', removeLoader);
-				
-				if (webCFG.waitReady && $.isReady) {
-					webshims.warn('Call webshims.polyfill before DOM-Ready or set waitReady to false.');
+			}
+			
+			if (webCFG.waitReady) {
+				$.readyWait++;
+				onReady(features, function(){
+					$.ready(true);
+				});
+			}
+			
+			$.each(features, function(i, feature){
+				if(!webshimsFeatures[feature]){
+					WSDEBUG && webshims.error("could not find webshims-feature (aborted): "+ feature);
+					isReady(feature, true);
+					return;
 				}
-				onReady(features, removeLoader);
-				if (addClass[0]) {
-					$('html').addClass(addClass.join(' '));
-				}
-				if(webCFG.loadStyles){
-					loader.loadCSS('styles/shim.css');
-				}
-				//remove function
-				firstPolyfillCall = $.noop;
-			};
-			var loadedFormBase;
-			return function(features){
-				
-				var toLoadFeatures = [];
-				
-				if(!loadedFormBase){
-					loadedFormBase = $.inArray('forms', features) !== -1;
-					if(!loadedFormBase && $.inArray('forms-ext', features) !== -1){
-						features.push('forms');
-						loadedFormBase = true;
-					}
-				}
-				
-				if (webCFG.waitReady) {
-					$.readyWait++;
-					onReady(features, function(){
-						$.ready(true);
+				if (feature !== webshimsFeatures[feature][0]) {
+					onReady(webshimsFeatures[feature], function(){
+						isReady(feature, true);
 					});
 				}
-				
-				$.each(features, function(i, feature){
-					if(!webshimsFeatures[feature]){
-						webshims.error("could not find webshims-feature (aborted): "+ feature);
-						isReady(feature, true);
-						return;
-					}
-					if (feature !== webshimsFeatures[feature][0]) {
-						onReady(webshimsFeatures[feature], function(){
-							isReady(feature, true);
-						});
-					}
-					toLoadFeatures = toLoadFeatures.concat(webshimsFeatures[feature]);
-				});
-				
-				firstPolyfillCall(features);
-				loadList(toLoadFeatures);
-				
-			};
-		})(),
+				toLoadFeatures = toLoadFeatures.concat(webshimsFeatures[feature]);
+			});
+			if(webCFG.loadStyles){
+				loader.loadCSS('styles/shim.css');
+			}
+			loadList(toLoadFeatures);
+			
+		},
 		
 		/*
 		 * handle ready modules
@@ -411,12 +379,12 @@
 					for (i = 0; i < list.length; i++) {
 						module = modules[list[i]];
 						if (!module || noNeedToLoad(module.name, list)) {
-							if (!module) {
+							if (WSDEBUG && !module) {
 								webshims.warn('could not find: ' + list[i]);
 							}
 							continue;
 						}
-						if (module.css) {
+						if (module.css && webCFG.loadStyles) {
 							loader.loadCSS(module.css);
 						}
 						
@@ -435,7 +403,7 @@
 						module = loadCombos[i];
 						
 						if($.inArray(module, loadedModules) == -1){
-							if(webshims.debug != 'noCombo'){
+							if(webCFG.debug != 'noCombo'){
 								$.each(modules[module].c, loadCombo);
 							}
 							if(!foundCombo){
@@ -461,14 +429,14 @@
 			},
 			
 			loadCSS: (function(){
-				var parent, loadedSrcs = [];
+				var parent, loadedSrcs = {};
 				return function(src){
 					src = this.makePath(src);
-					if ($.inArray(src, loadedSrcs) != -1) {
+					if (loadedSrcs[src]) {
 						return;
 					}
 					parent = parent || $('link, style')[0] || $('script')[0];
-					loadedSrcs.push(src);
+					loadedSrcs[src] = 1;
 					$('<link rel="stylesheet" />').insertBefore(parent).attr({
 						href: src
 					});
@@ -476,15 +444,14 @@
 			})(),
 			
 			loadScript: (function(){
-				var loadedSrcs = [];
+				var loadedSrcs = {};
 				var scriptLoader;
 				return function(src, callback, name){
 				
 					src = loader.makePath(src);
-					if ($.inArray(src, loadedSrcs) != -1) {return;}
+					if (loadedSrcs[src]) {return;}
 					var complete = function(){
 						
-						complete = null;
 						if (callback) {
 							callback();
 						}
@@ -506,16 +473,17 @@
 						}
 					};
 					
-					loadedSrcs.push(src);
+					loadedSrcs[src] = 1;
+					
 					if(window.require && window.define && window.define.amd){
 						require([src], complete);
 					} else if (window.sssl) {
 						sssl(src, complete);
 					} else if (window.yepnope) {
 						yepnope.injectJs(src, complete);
-					} else if (window.steal) {
-						steal(src).then(complete);
-					} 
+					} else {
+						$.ajax($.extend({}, webCFG.ajax, {url: src, success: complete, dataType: 'script'}));
+					}
 				};
 			})()
 		}
@@ -541,6 +509,7 @@
 		warn: 1,
 		error: 1
 	};
+	
 	
 	webshims.addMethodName = function(name){
 		name = name.split(':');
@@ -576,18 +545,7 @@
 		return (ret !== undefined) ? ret : this;
 	};
 	
-	//activeLang will be overridden
-
 	
-	//	set current Lang:
-	//		- webshims.activeLang(lang:string);
-	//	get current lang
-	//		- webshims.activeLang();
-	//		- webshims.activeLang({
-	//			module: moduleName:string,
-	//			callback: callback:function,
-	//			langObj: languageObj:array/object
-	//		});
 
 	webshims.activeLang = (function(){
 		var curLang = navigator.browserLanguage || navigator.language || '';
@@ -614,7 +572,7 @@
 	webshims.errorLog = [];
 	$.each(['log', 'error', 'warn', 'info'], function(i, fn){
 		webshims[fn] = function(message){
-			if( (importantLogs[fn] && webshims.debug !== false) || webshims.debug){
+			if( (importantLogs[fn] && webCFG.debug !== false) || webCFG.debug){
 				webshims.errorLog.push(message);
 				if(window.console && console.log){
 					console[(console[fn]) ? fn : 'log'](message);
@@ -622,40 +580,6 @@
 			}
 		};
 	});
-		
-	
-	//Overwrite DOM-Ready and implement a new ready-method
-	(function(){
-		$.isDOMReady = $.isReady;
-		var onReady = function(){
-			$.isDOMReady = true;
-			isReady('DOM', true);
-			setTimeout(function(){
-				isReady('WINDOWLOAD', true);
-			}, 9999);
-		};
-		if(!$.isDOMReady){
-			var $Ready = $.ready;
-			$.ready = function(unwait){
-				if(unwait !== true && document.body){
-					onReady();
-					$.ready = $Ready;
-				}
-				return $Ready.apply(this, arguments);
-			};
-			$.ready.promise = $Ready.promise;
-		} else {
-			onReady();
-		}
-		$(onReady);
-		
-		$(window).load(function(){
-			onReady();
-			setTimeout(function(){
-				isReady('WINDOWLOAD', true);
-			}, 9);
-		});
-	})();
 	
 	/*
 	 * jQuery-plugins for triggering dom updates can be also very usefull in conjunction with non-HTML5 DOM-Changes (AJAX)
@@ -672,6 +596,63 @@
 	 */
 	
 	(function(){
+		
+		//Overwrite DOM-Ready and implement a new ready-method
+		$.isDOMReady = $.isReady;
+		var onReady = function(){
+			$.isDOMReady = true;
+			isReady('DOM', true);
+			setTimeout(function(){
+				isReady('WINDOWLOAD', true);
+			}, 9999);
+		};
+		
+		firstRun = function(){
+			if(!firstRun.run){
+				if($.mobile && ($.mobile.textinput || $.mobile.rangeslider || $.mobile.button)){
+					if(WSDEBUG){
+						webshims.warn('jQM textinput/rangeslider/button detected waitReady was set to false. Use webshims.ready("featurename") to script against polyfilled methods/properties');
+					}
+					if(!webCFG.readyEvt){
+						webCFG.readyEvt = 'pageinit';
+					}
+					webCFG.waitReady = false;
+				}
+				
+				if (WSDEBUG && webCFG.waitReady && $.isReady) {
+					webshims.warn('Call webshims.polyfill before DOM-Ready or set waitReady to false.');
+				}
+				
+				if(!$.isDOMReady && webCFG.waitReady){
+					var $Ready = $.ready;
+					$.ready = function(unwait){
+						if(unwait !== true && document.body){
+							onReady();
+							$.ready = $Ready;
+						}
+						return $Ready.apply(this, arguments);
+					};
+					$.ready.promise = $Ready.promise;
+				}
+				if(webCFG.readyEvt){
+					$(document).one(webCFG.readyEvt, onReady);
+				} else {
+					$(onReady);
+				}
+			}
+			firstRun.run = true;
+		};
+		
+		setTimeout(function(){
+			$(onReady);
+		}, 4);
+		$(window).on('load', function(){
+			onReady();
+			setTimeout(function(){
+				isReady('WINDOWLOAD', true);
+			}, 9);
+		});
+		
 		var readyFns = [];
 		var eachTrigger = function(){
 			if(this.nodeType == 1){
@@ -713,7 +694,7 @@
 		};
 		
 		$.fn.jProp = function(){
-			return $($.fn.prop.apply(this, arguments) || []);
+			return this.pushStack($($.fn.prop.apply(this, arguments) || []));
 		};
 		
 		$.each(['after', 'before', 'append', 'prepend', 'replaceWith'], function(i, name){
@@ -752,6 +733,11 @@
 		});
 		
 	})();
+	
+	
+	if(WSDEBUG){
+		webCFG.debug = true;
+	}
 	
 	//this might be extended by ES5 shim feature
 	(function(){
@@ -826,7 +812,9 @@
 		c: [16, 7, 2, 8, 1, 12, 19, 25, 23, 27]
 	});
 	modules.swfmini.test();
-		
+	
+	addModule('sizzle', {test: $.expr.filters});
+	addModule('$ajax', {test: $.ajax});
 	/* 
 	 * polyfill-Modules 
 	 */
@@ -873,7 +861,6 @@
 	
 	//<canvas
 	(function(){
-		var flashCanvas;
 		addPolyfill('canvas', {
 			src: 'excanvas',
 			test: Modernizr.canvas,
@@ -882,45 +869,9 @@
 			
 			loadInit: function(){
 				var type = this.options.type;
-				var src;
 				if(type && type.indexOf('flash') !== -1 && (!modules.swfmini.test() || swfmini.hasFlashPlayerVersion('9.0.0'))){
-					window.FlashCanvasOptions = window.FlashCanvasOptions || {};
-					flashCanvas = FlashCanvasOptions;
-					if(type == 'flash'){
-						$.extend(flashCanvas, {
-							swfPath: webCFG.basePath + 'FlashCanvas/'
-						});
-						this.src = 'FlashCanvas/flashcanvas';
-						src = flashCanvas.swfPath + 'flashcanvas.swf';
-					} else {
-						$.extend(flashCanvas, {swfPath: webCFG.basePath + 'FlashCanvasPro/'});
-						this.src = 'FlashCanvasPro/flashcanvas';
-						//assume, that the user has flash10+
-						src = flashCanvas.swfPath + 'flash10canvas.swf';
-					}
-					//todo: implement cachbuster for flashcanvas
-//					if(webCFG.addCacheBuster){
-//						src += webCFG.addCacheBuster;
-//					}
+					this.src = type == 'flash' ? 'FlashCanvas/flashcanvas' : 'FlashCanvasPro/flashcanvas';
 				}
-			},
-			afterLoad: function(){
-				webshims.addReady(function(context, elem){
-					if(context == document){
-						if(window.G_vmlCanvasManager && G_vmlCanvasManager.init_ ){
-							G_vmlCanvasManager.init_(document);
-						}
-					}
-					$('canvas', context).add(elem.filter('canvas')).each(function(){
-						var hasContext = this.getContext;
-						if(!hasContext && window.G_vmlCanvasManager){
-							G_vmlCanvasManager.initElement(this);
-						}
-					});
-					if(context == document){
-						isReady('canvas', true);
-					}
-				});
 			},
 			methodNames: ['getContext'],
 			d: [DOMSUPPORT],
@@ -938,40 +889,32 @@
 		var modernizrInputTypes = Modernizr.inputtypes;
 		var formvalidation = 'formvalidation';
 		var fNuAPI = 'form-number-date-api';
-		var select = $('<select required=""><option disabled="" /></select>')[0];
 		var bustedValidity = false;
 		var bustedWidgetUi = false;
 		
 		var initialFormTest = function(){
-			var range, rangeCSS;
+			var range, rangeCSS, fieldset;
 			if(!initialFormTest.run){
-				addTest(formvalidation, function(){
-					return !!(modernizrInputAttrs.required && modernizrInputAttrs.pattern);
-				});
+				fieldset = $('<fieldset />')[0];
+				addTest(formvalidation, !!(modernizrInputAttrs.required && modernizrInputAttrs.pattern));
 				
-				addTest('fieldsetdisabled', function(){
-					var fieldset = $('<fieldset />')[0];
-					return 'elements' in fieldset && 'disabled' in fieldset;
-				});
+				addTest('fieldsetdisabled', 'disabled' in fieldset);
+				addTest('fieldsetelements', 'elements' in fieldset);
 				
 				if(modernizrInputTypes && modernizrInputTypes.range && !window.opera){
 					range = $('<input type="range" style="-webkit-appearance: slider-horizontal; -moz-appearance: range;" />').appendTo('html');
 					rangeCSS = range.css('appearance');
 					range.remove();
 					
-					addTest('csstrackrange', function(){
-						return rangeCSS == null || rangeCSS == 'range';
-					});
-					addTest('cssrangeinput', function(){
-						return rangeCSS == 'slider-horizontal' || rangeCSS == 'range';
-					});
-					addTest('styleableinputrange', function(){
-						return Modernizr.csstrackrange || Modernizr.cssrangeinput;
-					});
+					addTest('csstrackrange', rangeCSS == null || rangeCSS == 'range');
+					
+					addTest('cssrangeinput', rangeCSS == 'slider-horizontal' || rangeCSS == 'range');
+					
+					addTest('styleableinputrange', Modernizr.csstrackrange || Modernizr.cssrangeinput);
 				}
 				
 				if(Modernizr[formvalidation]){
-					bustedWidgetUi = !Modernizr.fieldsetdisabled || !('value' in document.createElement('progress')) || !('value' in document.createElement('output')) || !('required' in select) || (select.validity || {}).valid;
+					bustedWidgetUi = !Modernizr.fieldsetdisabled ||!Modernizr.fieldsetelements || !('value' in document.createElement('progress')) || !('value' in document.createElement('output'));
 					bugs.bustedValidity = bustedValidity = window.opera || bustedWidgetUi || !modernizrInputAttrs.list;
 				}
 
@@ -987,8 +930,13 @@
 		}
 		document.createElement('datalist');
 				
-		webshims.formcfg = [];
-		webshims.validationMessages = webshims.validityMessages = [];
+		
+		webshims.validationMessages = webshims.validityMessages = {
+			langSrc: 'i18n/formcfg-', 
+			availableLangs: ['ar', 'ch-ZN', 'cs', 'el', 'es', 'fr', 'he', 'hi', 'hu', 'it', 'ja', 'lt', 'nl', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ru', 'sv']
+		};
+		webshims.formcfg = $.extend({}, webshims.validationMessages);
+		
 		webshims.inputTypes = {};
 				
 		addPolyfill('form-core', {
@@ -997,10 +945,11 @@
 			test: initialFormTest,
 			options: {
 				placeholderType: 'value',
-				langSrc: 'i18n/formcfg-',
 				messagePopover: {},
-				datalistPopover: {
-					constrainWidth: true
+				list: {
+					popover: {
+						constrainWidth: true
+					}
 				},
 				iVal: {
 					handleBubble: true,
@@ -1009,13 +958,12 @@
 //					,hideBubble: undefined,
 //					,fieldWrapper: undefined
 //					,fx: 'slide'
-				},
-				availableLangs: ['ar', 'ch-ZN', 'cs', 'el', 'es', 'fr', 'he', 'hi', 'hu', 'it', 'ja', 'lt', 'nl', 'pl', 'pt', 'pt-BR', 'pt-PT', 'ru', 'sv'] //en and de are directly implemented in core
+				}
 	//			,customMessages: false,
 	//			overridePlaceholder: false, // might be good for IE10
 	//			replaceValidationUI: false
 			},
-			methodNames: ['setCustomValidity','checkValidity'],
+			methodNames: ['setCustomValidity','checkValidity', 'setSelectionRange'],
 			c: [16, 7, 2, 8, 1, 15, 30, 3, 31],
 			nM: 'input'
 		});
@@ -1036,7 +984,7 @@
 			test: function(){
 				return Modernizr[formvalidation] && !bustedValidity;
 			},
-			d: ['form-core', DOMSUPPORT],
+			d: ['form-core', DOMSUPPORT, 'sizzle'],
 			c: [16, 15, 24]
 		});
 		
@@ -1267,5 +1215,6 @@
 			webshims.polyfill(asyncWebshims.polyfill);
 		}
 	}
+	
 	return webshims;
 }));

@@ -49,15 +49,29 @@ webshims.register('form-validators', function($, webshims, window, document, und
 		var message = '';
 		var setMessage = function(message, errorType){
 			blockCustom = true;
-			data.customMismatchedRule = message ?  errorType : '';
 			
-			if(typeof message != 'string'){
-				message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || webshims.customErrorMessages[errorType][webshims.activeLang()] || webshims.customErrorMessages[errorType]['']; 
+			
+			if(message){
+				data.customMismatchedRule = errorType;
+				
+				if(typeof message != 'string'){
+					message = webshims.getContentValidationMessage(elem, false, errorType); 
+					
+					if(message && typeof message == 'object'){
+						message = message[errorType];
+					}
+					
+					if(!message || typeof message != 'string'){
+						message = webshims.customErrorMessages[errorType][webshims.activeLang()] || webshims.customErrorMessages[errorType]['']  || message.customError || message.defaultMessage || '';
+					}
+				}
+			} else {
+				message = '';
+				data.customMismatchedRule = '';
 			}
 			
-			if(typeof message == 'object'){
-				message = message[errorType] || message.customError || message.defaultMessage;
-			}
+			
+			
 			$(elem).setCustomValidity(message);
 			blockCustom = false;
 		};
@@ -70,7 +84,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 					return false;
 				}
 			});
-			if(message != 'async'){
+			if(message != 'async' && (message || !validity.valid)){
 				setMessage(message, customMismatchedRule);
 			}
 		}
@@ -148,8 +162,8 @@ webshims.register('form-validators', function($, webshims, window, document, und
 		groupTimer[name] = setTimeout(function(){
 			checkboxes
 				.addClass('group-required')
-				.unbind('click.groupRequired')
-				.bind('click.groupRequired', function(){
+				.off('click.groupRequired')
+				.on('click.groupRequired', function(){
 					checkboxes.filter('.group-required').each(function(){
 						webshims.refreshCustomValidityRules(this);
 					});
@@ -314,7 +328,6 @@ webshims.register('form-validators', function($, webshims, window, document, und
 						remoteValidate.restartAjax = false;
 					},
 					getResponse: function(data){
-						var old = webshims.refreshCustomValidityRules;
 						if(!data){
 							data = {message: '', valid: true};
 						} else if(typeof data == 'string'){

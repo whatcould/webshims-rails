@@ -16,6 +16,7 @@
 					errorTimer,
 					googleTimer,
 					calledEnd,
+					createAjax,
 					endCallback = function(){
 						if(calledEnd){return;}
 						if(pos){
@@ -39,7 +40,7 @@
 						endCallback();
 					},
 					resetCallback = function(){
-						$(document).unbind('google-loader', resetCallback);
+						$(document).off('google-loader', resetCallback);
 						clearTimeout(googleTimer);
 						clearTimeout(errorTimer);
 					},
@@ -84,44 +85,52 @@
 						}
 						return;
 					}
-					$.ajax({
-						url: 'http://freegeoip.net/json/',
-						dataType: 'jsonp',
-						cache: true,
-						jsonp: 'callback',
-						success: function(data){
-							locationAPIs--;
-							if(!data){return;}
-							pos = pos || {
-								coords: {
-									latitude: data.latitude,
-									longitude: data.longitude,
-									altitude: null,
-									accuracy: 43000,
-									altitudeAccuracy: null,
-									heading: parseInt('NaN', 10),
-									velocity: null
-								},
-								//extension similiar to FF implementation
-								address: {
-									city: data.city,
-									country: data.country_name,
-									countryCode: data.country_code,
-									county: "",
-									postalCode: data.zipcode,
-									premises: "",
-									region: data.region_name,
-									street: "",
-									streetNumber: ""
-								}
-							};
-							endCallback();
-						},
-						error: function(){
-							locationAPIs--;
-							endCallback();
-						}
-					});
+					createAjax = function(){
+						$.ajax({
+							url: 'http://freegeoip.net/json/',
+							dataType: 'jsonp',
+							cache: true,
+							jsonp: 'callback',
+							success: function(data){
+								locationAPIs--;
+								if(!data){return;}
+								pos = pos || {
+									coords: {
+										latitude: data.latitude,
+										longitude: data.longitude,
+										altitude: null,
+										accuracy: 43000,
+										altitudeAccuracy: null,
+										heading: parseInt('NaN', 10),
+										velocity: null
+									},
+									//extension similiar to FF implementation
+									address: {
+										city: data.city,
+										country: data.country_name,
+										countryCode: data.country_code,
+										county: "",
+										postalCode: data.zipcode,
+										premises: "",
+										region: data.region_name,
+										street: "",
+										streetNumber: ""
+									}
+								};
+								endCallback();
+							},
+							error: function(){
+								locationAPIs--;
+								endCallback();
+							}
+						});
+					};
+					if($.ajax){
+						createAjax();
+					} else {
+						webshims.ready('$ajax', createAjax);
+						webshims.loader.loadList(['$ajax']);
+					}
 					clearTimeout(googleTimer);
 					if (!window.google || !window.google.loader) {
 						googleTimer = setTimeout(function(){
@@ -164,6 +173,9 @@
 		return api;
 	})();
 	
+	webshims.ready('WINDOWLOAD', function(){
+		webshims.loader.loadList(['$ajax']);
+	});
 	webshims.isReady('geolocation', true);
 })(webshims.$);
 
@@ -186,7 +198,7 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 					oldSummary.remove();
 				} else {
 					oldSummary
-						.unbind('.summaryPolyfill')
+						.off('.summaryPolyfill')
 						.removeData('detailsElement')
 						.removeAttr('role')
 						.removeAttr('tabindex')
@@ -204,7 +216,7 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 	var getSummary = function(details){
 		var summary = $.data(details, 'summaryElement');
 		if(!summary){
-			summary = $('> summary:first-child', details);
+			summary = $(details).children('summary:first-child');
 			if(!summary[0]){
 				$(details).prependPolyfill('<summary class="fallback-summary">'+ options.text +'</summary>');
 				summary = $.data(details, 'summaryElement');
@@ -772,9 +784,9 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	})();
 	
 	
-	var transformDimension = (function(){
+	var getComputedDimension = (function(){
 		var dimCache = {};
-		var getRealDims = function(data){
+		var getVideoDims = function(data){
 			var ret, poster, img;
 			if(dimCache[data.currentSrc]){
 				ret = dimCache[data.currentSrc];
@@ -799,54 +811,102 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 						} else {
 							delete dimCache[poster];
 						}
+						img.onload = null;
 					};
 					img.src = poster;
-					if(img.complete){
+					if(img.complete && img.onload){
 						img.onload();
 					}
 				}
 			}
 			return ret || {width: 300, height: data._elemNodeName == 'video' ? 150 : 50};
 		};
-		return function(data){
-			var realDims, ratio;
-			var ret = data.elemDimensions;
+		
+		var getCssStyle = function(elem, style){
+			return elem.style[style] || (elem.currentStyle && elem.currentStyle[style]) || (window.getComputedStyle && (window.getComputedStyle( elem, null ) || {} )[style]) || '';
+		};
+		var minMaxProps = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'];
+		
+		var addMinMax = function(elem, ret){
+			var i, prop;
+			var hasMinMax = false;
+			for (i = 0; i < 4; i++) {
+				prop = getCssStyle(elem, minMaxProps[i]);
+				if(parseFloat(prop, 10)){
+					hasMinMax = true;
+					ret[minMaxProps[i]] = prop;
+				}
+			}
+			return hasMinMax;
+		};
+		var retFn = function(data){
+			var videoDims, ratio, hasMinMax;
+			var elem = data._elem;
+			var autos = {
+				width: getCssStyle(elem, 'width') == 'auto',
+				height: getCssStyle(elem, 'height') == 'auto'
+			};
+			var ret  = {
+				width: !autos.width && $(elem).width(),
+				height: !autos.height && $(elem).height()
+			};
 			
-			if(ret.width == 'auto' || ret.height == 'auto'){
-				ret = $.extend({}, data.elemDimensions);
-				realDims = getRealDims(data);
-				ratio = realDims.width / realDims.height;
+			if(autos.width || autos.height){
+				videoDims = getVideoDims(data);
+				ratio = videoDims.width / videoDims.height;
 				
-				if(ret.width == 'auto' && ret.height == 'auto'){
-					ret = realDims;
-				} else if(ret.width == 'auto'){
-					data.shadowElem.css({height: ret.height});
-					ret.width = data.shadowElem.height() * ratio;
-				} else {
-					data.shadowElem.css({width: ret.width});
-					ret.height = data.shadowElem.width() / ratio;
+				if(autos.width && autos.height){
+					ret.width = videoDims.width;
+					ret.height = videoDims.height;
+				} else if(autos.width){
+					ret.width = ret.height * ratio;
+				} else if(autos.height){
+					ret.height = ret.width / ratio;
+				}
+				
+				if(addMinMax(elem, ret)){
+					data.shadowElem.css(ret);
+					if(autos.width){
+						ret.width = data.shadowElem.height() * ratio;
+					} 
+					if(autos.height){
+						ret.height = ((autos.width) ? ret.width :  data.shadowElem.width()) / ratio;
+					}
+					if(autos.width && autos.height){
+						data.shadowElem.css(ret);
+						ret.height = data.shadowElem.width() / ratio;
+						ret.width = ret.height * ratio;
+						
+						data.shadowElem.css(ret);
+						ret.width = data.shadowElem.height() * ratio;
+						ret.height = ret.width / ratio;
+						
+					}
+					if(!Modernizr.video){
+						ret.width = data.shadowElem.width();
+						ret.height = data.shadowElem.height();
+					}
 				}
 			}
 			return ret;
 		};
+		
+		return retFn;
 	})();
+	
 	var setElementDimension = function(data, hasControls){
 		var dims;
-		var elem = data._elem;
+		
 		var box = data.shadowElem;
-		$(elem)[hasControls ? 'addClass' : 'removeClass']('webshims-controls');
+		$(data._elem)[hasControls ? 'addClass' : 'removeClass']('webshims-controls');
 
-		if(data.isActive == 'third'){
+		if(data.isActive == 'third' || data.activating == 'third'){
 			if(data._elemNodeName == 'audio' && !hasControls){
 				box.css({width: 0, height: 0});
 			} else {
-				data.elemDimensions = {
-					width: elem.style.width || $.attr(elem, 'width') || $(elem).width(),
-					height: elem.style.height || $.attr(elem, 'height') || $(elem).height()
-				};
-				dims = transformDimension(data);
-				dims.minWidth = elem.style.minWidth;
-				dims.minHeight = elem.style.minHeight;
+				data._elem.style.display = '';
+				dims = getComputedDimension(data);
+				data._elem.style.display = 'none';
 				box.css(dims);
 			}
 		}
@@ -905,6 +965,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			}, 1);
 			return;
 		}
+		
+		var attrStyle = {};
 
 		if(loadedSwf < 1){
 			loadedSwf = 1;
@@ -915,7 +977,8 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			data = webshims.data(elem, 'mediaelement');
 		}
 		
-		if($.attr(elem, 'height') || $.attr(elem, 'width')){
+		if((attrStyle.height = $.attr(elem, 'height') || '') || (attrStyle.width = $.attr(elem, 'width') || '')){
+			$(elem).css(attrStyle);
 			webshims.warn("width or height content attributes used. Webshims prefers the usage of CSS (computed styles or inline styles) to detect size of a video/audio. It's really more powerfull.");
 		}
 		
@@ -1022,7 +1085,7 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			box.insertBefore(elem);
 			
 			if(hasNative){
-				$.extend(data, {volume: $.prop(elem, 'volume'), muted: $.prop(elem, 'muted'), paused: $.prop(elem, 'paused')});
+				$.extend(data, {volume: $.prop(elem, 'volume'), muted: $.prop(elem, 'muted')});
 			}
 			
 			webshims.addShadowDom(elem, box);
@@ -1794,9 +1857,9 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		var loadEvents = 'play playing updatetrackdisplay';
 		var obj = trackData.track;
 		var load = function(){
-			var error, ajax, src;
+			var error, ajax, src, createAjax;
 			if(obj.mode != 'disabled' && $.attr(track, 'src') && (src = $.prop(track, 'src'))){
-				$(mediaelem).unbind(loadEvents, load);
+				$(mediaelem).off(loadEvents, load);
 				if(!trackData.readyState){
 					error = function(){
 						trackData.readyState = 3;
@@ -1808,26 +1871,34 @@ webshims.register('track', function($, webshims, window, document, undefined){
 					try {
 						obj.cues = mediaelement.createCueList();
 						obj.activeCues = obj.shimActiveCues = obj._shimActiveCues = mediaelement.createCueList();
-						ajax = $.ajax({
-							dataType: 'text',
-							url: src,
-							success: function(text){
-								if(ajax.getResponseHeader('content-type') != 'text/vtt'){
-									webshims.error('set the mime-type of your WebVTT files to text/vtt. see: http://dev.w3.org/html5/webvtt/#text/vtt');
-								}
-								mediaelement.parseCaptions(text, obj, function(cues){
-									if(cues && 'length' in cues){
-										trackData.readyState = 2;
-										$(track).triggerHandler('load');
-										$(mediaelem).triggerHandler('updatetrackdisplay');
-									} else {
-										error();
+						createAjax = function(){
+							ajax = $.ajax({
+								dataType: 'text',
+								url: src,
+								success: function(text){
+									if(ajax.getResponseHeader('content-type') != 'text/vtt'){
+										webshims.error('set the mime-type of your WebVTT files to text/vtt. see: http://dev.w3.org/html5/webvtt/#text/vtt');
 									}
-								});
-								
-							},
-							error: error
-						});
+									mediaelement.parseCaptions(text, obj, function(cues){
+										if(cues && 'length' in cues){
+											trackData.readyState = 2;
+											$(track).triggerHandler('load');
+											$(mediaelem).triggerHandler('updatetrackdisplay');
+										} else {
+											error();
+										}
+									});
+									
+								},
+								error: error
+							});
+						};
+						if($.ajax){
+							createAjax();
+						} else {
+							webshims.ready('$ajax', createAjax);
+							webshims.loader.loadList(['$ajax']);
+						}
 					} catch(er){
 						error();
 						webshims.error(er);
@@ -1840,7 +1911,7 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		obj._shimActiveCues = null;
 		obj.activeCues = null;
 		obj.cues = null;
-		$(mediaelem).unbind(loadEvents, load);
+		$(mediaelem).off(loadEvents, load);
 		$(mediaelem).on(loadEvents, load);
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
@@ -2259,8 +2330,8 @@ modified for webshims
 		}
 	}, 'prop');
 
-	
-	$(document).on('emptied ended updatetracklist', function(e){
+	//wsmediareload
+	var thUpdateList = function(e){
 		if($(e.target).is('audio, video')){
 			var baseData = webshims.data(e.target, 'mediaelementBase');
 			if(baseData){
@@ -2270,7 +2341,7 @@ modified for webshims
 				}, 0);
 			}
 		}
-	});
+	};
 	
 	var getNativeReadyState = function(trackElem, textTrack){
 		return textTrack.readyState || trackElem.readyState;
@@ -2310,6 +2381,7 @@ modified for webshims
 			.each(function(){
 				updateMediaTrackList.call(this);
 			})
+			.on('emptied updatetracklist wsmediareload', thUpdateList)
 			.each(function(){
 				if(Modernizr.track){
 					var shimedTextTracks = $.prop(this, 'textTracks');

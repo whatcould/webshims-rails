@@ -61,38 +61,64 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		return ret;
 	};
 	
-	$.extend($.expr[":"], {
-		"valid-element": function(elem){
-			return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
-		},
-		"invalid-element": function(elem){
-			return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
-		},
-		"required-element": function(elem){
-			return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required'));
-		},
-		"user-error": function(elem){
-			return ($.prop(elem, 'willValidate') && $(elem).hasClass('user-error'));
-		},
-		"optional-element": function(elem){
-			return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required') === false);
+	var extendSels = function(){
+		var exp = $.expr[":"];
+		$.extend(exp, {
+			"valid-element": function(elem){
+				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
+			},
+			"invalid-element": function(elem){
+				return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
+			},
+			"required-element": function(elem){
+				return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required'));
+			},
+			"user-error": function(elem){
+				return ($.prop(elem, 'willValidate') && $(elem).hasClass('user-error'));
+			},
+			"optional-element": function(elem){
+				return !!($.prop(elem, 'willValidate') && $.prop(elem, 'required') === false);
+			}
+		});
+		
+		['valid', 'invalid', 'required', 'optional'].forEach(function(name){
+			exp[name] = $.expr[":"][name+"-element"];
+		});
+		
+		// sizzle/jQuery has a bug with :disabled/:enabled selectors
+		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><fieldset>').find('input').is(':disabled')){
+			$.extend(exp, {
+				"enabled": function( elem ) {
+					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
+				},
+		
+				"disabled": function( elem ) {
+					return elem.disabled === true || ('disabled' in elem && $(elem).is('fieldset[disabled] *'));
+				}
+			});
 		}
-	});
-	
-	['valid', 'invalid', 'required', 'optional'].forEach(function(name){
-		$.expr[":"][name] = $.expr.filters[name+"-element"];
-	});
-	
-	//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used) 
-	var pseudoFocus = $.expr[":"].focus;
-	$.expr[":"].focus = function(){
-		try {
-			return pseudoFocus.apply(this, arguments);
-		} catch(e){
-			webshims.error(e);
+		
+		
+		//bug was partially fixed in 1.10.0 for IE9, but not IE8 (move to es5 as soon as 1.10.2 is used)
+		if(typeof document.activeElement == 'unknown'){
+			var pseudoFocus = exp.focus;
+			exp.focus = function(){
+				try {
+					return pseudoFocus.apply(this, arguments);
+				} catch(e){
+					webshims.error(e);
+				}
+				return false;
+			};
 		}
-		return false;
 	};
+	
+	if($.expr.filters){
+		extendSels();
+	} else {
+		webshims.ready('sizzle', extendSels);
+	}
+	
 	
 	webshims.triggerInlineForm = function(elem, event){
 		$(elem).trigger(event);
@@ -161,7 +187,10 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	webshims.getContentValidationMessage = function(elem, validity, key){
-		var message = $(elem).data('errormessage') || elem.getAttribute('x-moz-errormessage') || '';
+		if(webshims.errorbox && webshims.errorbox.initIvalContentMessage){
+			webshims.errorbox.initIvalContentMessage(elem);
+		}
+		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage') : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
 		} else if(message) {
@@ -207,7 +236,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
-		if('form' in e.target && (e.target.list || $(e.target).is(':invalid'))){
+		if('form' in e.target){
 			lazyLoad();
 		}
 	});
