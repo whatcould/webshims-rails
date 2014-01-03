@@ -2,21 +2,30 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 	"use strict";
 	var curCfg;
 	var formcfg = webshims.formcfg;
+	var hasFormValidation = Modernizr.formvalidation && !webshims.bugs.bustedValidity;
 	var monthDigits = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 	var stopPropagation = function(e){
 		e.stopImmediatePropagation();
 	};
-	var getMonthOptions = (function(){
-		var str;
-		return function(){
-			if(!str){
-				str = ('<option value=""></option>')+$.map(monthDigits, function(val){
-					return '<option value="'+val+'"]>'+val+'</option>';
-				}).join('');
-			}
-			return str;
-		};
-	})();
+	var getMonthOptions = function(opts){
+		var selectName = 'monthSelect'+opts.formatMonthNames;
+		if(!curCfg[selectName]){
+			var labels = curCfg.date[opts.formatMonthNames] || monthDigits;
+			curCfg[selectName] = ('<option value=""></option>')+$.map(monthDigits, function(val, i){
+				return '<option value="'+val+'"]>'+labels[i]+'</option>';
+			}).join('');
+		}
+		return curCfg[selectName];
+	};
+	var daySelect = '<select class="dd"><option value=""></option>'+ (function(){
+		var i = 1;
+		var opts = [];
+		while(i < 32){
+			opts.push('<option>'+ ((i < 10) ? '0'+ i : i) +'</option>' );
+			i++;
+		}
+		return opts.join('');
+	})() +'</select>';
 	var createFormat = function(name){
 		if(!curCfg.patterns[name+'Obj']){
 			var obj = {};
@@ -30,15 +39,19 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		date: {
 			_create: function(opts){
 				var obj = {
-					splits: [$('<input type="text" class="yy" size="4" inputmode="numeric" />')[0]] 
+					splits: [$('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]] 
 				};
+				
 				if(opts.monthSelect){
 					obj.splits.push($('<select class="mm">'+getMonthOptions(opts)+'</select>')[0]);
 				} else {
 					obj.splits.push($('<input type="text" class="mm" inputmode="numeric" maxlength="2" size="2" />')[0]);
 				}
-				obj.splits.push($('<input type="text" class="dd ws-spin" inputmode="numeric" maxlength="2" size="2" />')[0]);
-				
+				if(opts.daySelect){
+					obj.splits.push($(daySelect)[0]);
+				} else {
+					obj.splits.push($('<input type="text" class="dd ws-spin" inputmode="numeric" maxlength="2" size="2" />')[0]);
+				}
 				
 				obj.elements = [obj.splits[0], $('<span class="ws-input-seperator" />')[0], obj.splits[1], $('<span class="ws-input-seperator" />')[0], obj.splits[2]];
 				return obj;
@@ -68,7 +81,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					splits: [$('<input type="text" class="yy" inputmode="numeric" size="4" />')[0]] 
 				};
 				if(opts.monthSelect){
-					obj.splits.push($('<select class="mm ws-spin">'+getMonthOptions(opts)+'</select>')[0]);
+					obj.splits.push($('<select class="mm">'+getMonthOptions(opts)+'</select>')[0]);
 				} else {
 					obj.splits.push($('<input type="text" class="mm ws-spin" />')[0]);
 					if(opts.onlyMonthDigits){
@@ -472,18 +485,30 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			},
 			date: function(val, opts, noCorrect){
 				createFormat('d');
-				var i;
-				var obj;
+				var tmp, obj;
+				var ret = '';
 				if(opts.splitInput){
 					obj = {yy: 0, mm: 1, dd: 2};
 				} else {
 					obj = curCfg.patterns.dObj;
 					val = val.split(curCfg.dFormat);
 				}
-				
-				return (val.length == 3 && val[0] && val[1] && val[2] && (!noCorrect || (val[obj.yy].length > 3 && val[obj.mm].length == 2 && val[obj.dd].length == 2))) ? 
-					([addZero(val[obj.yy]), addZero(val[obj.mm]), addZero(val[obj.dd])]).join('-') : 
-					''
+				if(val.length == 3 && val[0] && val[1] && val[2] && (!noCorrect || (val[obj.yy].length > 3 && val[obj.mm].length == 2 && val[obj.dd].length == 2))){
+					if(val[obj.mm] > 12 && val[obj.dd] < 13){
+						tmp = val[obj.dd];
+						val[obj.dd] = val[obj.mm];
+						val[obj.mm] = tmp;
+					}
+					if(val[obj.yy].length < 4){
+						tmp = ((new Date()).getFullYear() +'').substr(0, 4 - val[obj.yy].length);
+						if(val[obj.yy] > 50){
+							tmp--;
+						}
+						val[obj.yy] = tmp + val[obj.yy];
+					}
+					ret = ([addZero(val[obj.yy]), addZero(val[obj.mm]), addZero(val[obj.dd])]).join('-');
+				}
+				return ret
 				;
 			},
 			color: function(val, opts){
@@ -583,7 +608,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				this.buttonWrapper = $('<span class="input-buttons '+this.type+'-input-buttons"></span>').insertAfter(this.element);
 				this.options.containerElements.push(this.buttonWrapper[0]);
 				
-				o.mirrorValidity = o.mirrorValidity && this.orig && Modernizr.formvalidation && !webshims.bugs.bustedValidity;
+				o.mirrorValidity = o.mirrorValidity && this.orig && hasFormValidation;
 				
 				if(o.splitInput && this._addSplitInputs){
 					if(o.monthSelect){
@@ -687,7 +712,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				
 				if(this.type != 'color'){
 					(function(){
-						var localeChange ;
+						var localeChange, select, selectVal;
 						if(!o.splitInput){
 							localeChange = function(){
 								
@@ -702,6 +727,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						} else {
 							localeChange = function(){
 								that.reorderInputs();
+								if(o.monthSelect){
+									select = that.inputElements.filter('select.mm');
+									selectVal = select.prop('value');
+									select.html(getMonthOptions(o));
+									select.prop('value', selectVal);
+								}
 							};
 							that.reorderInputs();
 						}
@@ -735,7 +766,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				}
 				if(options.splitInput && typeof placeholder == 'object'){
 					$.each(this.splits, function(i, elem){
-						$.prop(elem, 'placeholder', placeholder[i]);
+						if($.nodeName(elem, 'select')){
+							$(elem).children('option:first-child').text(placeholder[i]);
+						} else {
+							$.prop(elem, 'placeholder', placeholder[i]);
+						}
 					});
 				} else {
 					this.element.prop('placeholder', placeholder);
@@ -819,14 +854,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				}
 				
 				
-				if(!o.min && typeof o.relMin == 'number'){
-					o.min = this.asValue(this.getRelNumber(o.relMin));
-					$.prop(this.orig, 'min', o.min);
-				}
 				
-				if(!o.max && typeof o.relMax == 'number'){
-					o.max = this.asValue(this.getRelNumber(o.relMax));
-					$.prop(this.orig, 'max', o.max);
+				if((!o.max && typeof o.relMax == 'number') || (!o.min && typeof o.relMin == 'number')){
+					webshims.error('relMax/relMin are not supported anymore')
 				}
 				this._init = true;
 			},
@@ -895,6 +925,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				if(!this._init || force || this.options[name] !== val){
 					if(isValue){
 						this._beforeValue(val);
+					} else {
+						this.elemHelper.prop(name, val);
 					}
 					
 					val = formatVal[this.type](val, this.options);
@@ -945,9 +977,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		$.fn.spinbtnUI = function(opts){
 			opts = $.extend({
-				monthNames: 'monthNames',
-				size: 1,
-				startView: 0
+				monthNames: 'monthNames'
 			}, opts);
 			return this.each(function(){
 				$.webshims.objectCreate(spinBtnProto, {
@@ -1019,10 +1049,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		
 		picker.commonInit = function(data, popover){
+			if(data._commonInit){return;}
+			data._commonInit = true;
 			var tabbable;
 			
 			popover.isDirty = true;
-			
+
 			popover.element.on('updatepickercontent pickerchange', function(){
 				tabbable = false;
 			});
@@ -1062,6 +1094,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				return function(prop){
 					if(prop == 'value' && !data.options.inlinePicker){return;}
 					popover.isDirty = true;
+					
 					if(popover.isVisible){
 						clearTimeout(timer);
 						timer = setTimeout(update, 9);
@@ -1129,30 +1162,6 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			
 			options.containerElements.push(popover.element[0]);
 			
-			if(data.type != 'color'){
-				if(options.yearButtons){
-					options.startView = 2;
-				} 
-				if(!options.startView){
-					options.startView = 0;
-				}
-				
-				if(data.type == 'time'){
-					options.minView = 3;
-					options.startView = 3;
-				}
-				if(!options.minView){
-					options.minView = 0;
-				}
-				if(options.startView < options.minView){
-					options.startView = options.minView;
-					webshims.warn("wrong config for minView/startView.");
-				}
-				if(!options.size){
-					options.size = 1;
-				}
-			}
-			
 			popover.element
 				.addClass(data.type+'-popover input-picker')
 				.attr({role: 'application'})
@@ -1213,12 +1222,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					};
 					data.inputElements.on({
 						keydown: function(e){
-							if(e.keyCode == 40 && e.altKey){
+							if(e.keyCode == 40 && e.altKey && !$.nodeName(e.target, 'select')){
 								open();
 							}
 						},
-						focus: function(){
-							if(!popover.stopOpen && (options.buttonOnly || options.openOnFocus || (mouseFocus && options.openOnMouseFocus))){
+						focus: function(e){
+							if(!popover.stopOpen && (options.buttonOnly || options.openOnFocus || (mouseFocus && options.openOnMouseFocus)) && !$.nodeName(e.target, 'select')){
 								popover.openedByFocus = options.buttonOnly ? false : !options.noInput;
 								show();
 							} else {
@@ -1235,7 +1244,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 									popover.activeElement.focus();
 								}, 4);
 							}
-							if(data.element.is(':focus')){
+							if(data.element.is(':focus')  && !$.nodeName(e.target, 'select')){
 								popover.openedByFocus = options.buttonOnly ? false : !options.noInput;
 								show();
 							}
@@ -1463,10 +1472,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						opts[optsName] = $.attr(this, copyAttrs[i]) || opts[optsName];
 					}
 				}
-				if(opts.monthSelect){
-					opts.onlyMonthDigits = true;
-				}
-				if(opts.onlyMonthDigits){
+				
+				if(opts.onlyMonthDigits || (!opts.formatMonthNames && opts.monthSelect)){
 					opts.formatMonthNames = 'monthDigits';
 				}
 				data.shim = inputTypes[type]._create(opts);
@@ -1516,11 +1523,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				
 				data.shim.element.on('change input', stopPropagation);
 				
-				if(Modernizr.formvalidation){
+				if(hasFormValidation){
 					$(opts.orig).on('firstinvalid', function(e){
 						if(!webshims.fromSubmit && isCheckValidity){return;}
 						$(opts.orig).off('invalid.replacedwidgetbubble').on('invalid.replacedwidgetbubble', function(evt){
-							if(!e.isInvalidUIPrevented() && !evt.isDefaultPrevented()){
+							if(!evt.isDefaultPrevented()){
 								webshims.validityAlert.showFor( e.target );
 								e.preventDefault();
 								evt.preventDefault();
@@ -1547,7 +1554,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		};
 		
 		
-		if(Modernizr.formvalidation){
+		if(hasFormValidation){
 			['input', 'form'].forEach(function(name){
 				var desc = webshims.defineNodeNameProperty(name, 'checkValidity', {
 					prop: {
@@ -1598,7 +1605,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			if(!modernizrInputTypes[name] || replace[name]){
 				extendType(name, {
 					_create: function(opts, set){
-						if(opts.monthSelect){
+						if(opts.monthSelect || opts.daySelect){
 							opts.splitInput = true;
 						}
 						if(opts.splitInput && !splitInputs[name]){

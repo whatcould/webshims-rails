@@ -1,439 +1,4 @@
-webshims.register('form-native-extend', function($, webshims, window, doc, undefined, options){
-	"use strict";
-	var Modernizr = window.Modernizr;
-	var modernizrInputTypes = Modernizr.inputtypes;
-	if(!Modernizr.formvalidation || webshims.bugs.bustedValidity){return;}
-	var typeModels = webshims.inputTypes;
-	var runTest = false;
-	var validityRules = {};
-	var updateValidity = (function(){
-		var timer;
-		var getValidity = function(){
-			$(this).prop('validity');
-		};
-		var update = function(){
-			$('input').each(getValidity);
-		};
-		return function(){
-			clearTimeout(timer);
-			timer = setTimeout(update, 9);
-		};
-	})();
-	webshims.addInputType = function(type, obj){
-		typeModels[type] = obj;
-		runTest = true;
-		//update validity of all implemented input types
-		if($.isDOMReady && Modernizr.formvalidation && !webshims.bugs.bustedValidity){
-			updateValidity();
-		}
-	};
-	
-	webshims.addValidityRule = function(type, fn){
-		validityRules[type] = fn;
-	};
-	
-	$.each({typeMismatch: 'mismatch', badInput: 'bad'}, function(name, fn){
-		webshims.addValidityRule(name, function (input, val, cache, validityState){
-			if(val === ''){return false;}
-			var ret = validityState[name];
-			if(!('type' in cache)){
-				cache.type = (input[0].getAttribute('type') || '').toLowerCase();
-			}
-			
-			if(typeModels[cache.type] && typeModels[cache.type][fn]){
-				ret = typeModels[cache.type][fn](val, input);
-			}
-			return ret || false;
-		});
-	});
-	
-	var formsExtModule = webshims.modules['form-number-date-api'];
-	var overrideValidity = formsExtModule.loaded && !formsExtModule.test();
-	var validityProps = ['customError', 'badInput','typeMismatch','rangeUnderflow','rangeOverflow','stepMismatch','tooLong', 'tooShort','patternMismatch','valueMissing','valid'];
-	
-	var validityChanger = ['value'];
-	var validityElements = [];
-	var testValidity = function(elem, init){
-		if(!elem && !runTest){return;}
-		var type = (elem.getAttribute && elem.getAttribute('type') || elem.type || '').toLowerCase();
-		if(typeModels[type]){
-			$.prop(elem, 'validity');
-		}
-	};
-	
-	var oldSetCustomValidity = {};
-	['input', 'textarea', 'select'].forEach(function(name){
-		var desc = webshims.defineNodeNameProperty(name, 'setCustomValidity', {
-			prop: {
-				value: function(error){
-					error = error+'';
-					var elem = (name == 'input') ? $(this).getNativeElement()[0] : this;
-					desc.prop._supvalue.call(elem, error);
-					
-					
-					if(overrideValidity){
-						webshims.data(elem, 'hasCustomError', !!(error));
-						testValidity(elem);
-					}
-				}
-			}
-		});
-		oldSetCustomValidity[name] = desc.prop._supvalue;
-	});
-		
-	
-	if(overrideValidity){
-		validityChanger.push('min');
-		validityChanger.push('max');
-		validityChanger.push('step');
-		validityElements.push('input');
-	}
-	
-	
-	if(overrideValidity){
-		var stopValidity;
-		validityElements.forEach(function(nodeName){
-			
-			var oldDesc = webshims.defineNodeNameProperty(nodeName, 'validity', {
-				prop: {
-					get: function(){
-						if(stopValidity){return;}
-						var elem = (nodeName == 'input') ? $(this).getNativeElement()[0] : this;
-						
-						var validity = oldDesc.prop._supget.call(elem);
-						
-						if(!validity){
-							return validity;
-						}
-						var validityState = {};
-						validityProps.forEach(function(prop){
-							validityState[prop] = validity[prop] || false;
-						});
-						
-						if( !$.prop(elem, 'willValidate') ){
-							return validityState;
-						}
-						stopValidity = true;
-						var jElm 			= $(elem),
-							cache 			= {type: (elem.getAttribute && elem.getAttribute('type') || elem.type || '').toLowerCase(), nodeName: (elem.nodeName || '').toLowerCase()},
-							val				= jElm.val(),
-							customError 	= !!(webshims.data(elem, 'hasCustomError')),
-							setCustomMessage
-						;
-						stopValidity = false;
-						validityState.customError = customError;
-						
-						if( validityState.valid && validityState.customError ){
-							validityState.valid = false;
-						} else if(!validityState.valid) {
-							var allFalse = true;
-							$.each(validityState, function(name, prop){
-								if(prop){
-									allFalse = false;
-									return false;
-								}
-							});
-							
-							if(allFalse){
-								validityState.valid = true;
-							}
-							
-						}
-						
-						$.each(validityRules, function(rule, fn){
-							validityState[rule] = fn(jElm, val, cache, validityState);
-							if( validityState[rule] && (validityState.valid || !setCustomMessage) && ((typeModels[cache.type])) ) {
-								oldSetCustomValidity[nodeName].call(elem, webshims.createValidationMessage(elem, rule));
-								validityState.valid = false;
-								setCustomMessage = true;
-							}
-						});
-						if(validityState.valid){
-							oldSetCustomValidity[nodeName].call(elem, '');
-							webshims.data(elem, 'hasCustomError', false);
-						}
-						return validityState;
-					},
-					writeable: false
-					
-				}
-			});
-		});
-
-		validityChanger.forEach(function(prop){
-			webshims.onNodeNamesPropertyModify(validityElements, prop, function(s){
-				testValidity(this);
-			});
-		});
-		
-		if(doc.addEventListener){
-			var inputThrottle;
-			var testPassValidity = function(e){
-				if(!('form' in e.target)){return;}
-				clearTimeout(inputThrottle);
-				testValidity(e.target);
-			};
-			
-			doc.addEventListener('change', testPassValidity, true);
-			
-			
-			doc.addEventListener('input', function(e){
-				clearTimeout(inputThrottle);
-				inputThrottle = setTimeout(function(){
-					testValidity(e.target);
-				}, 290);
-			}, true);
-		}
-		
-		var validityElementsSel = validityElements.join(',');	
-		
-		webshims.addReady(function(context, elem){
-			if(runTest){
-				$(validityElementsSel, context).add(elem.filter(validityElementsSel)).each(function(){
-					testValidity(this);
-				});
-			}
-		});
-		
-		
-	} //end: overrideValidity
-	
-	webshims.defineNodeNameProperty('input', 'type', {
-		prop: {
-			get: function(){
-				var elem = this;
-				var type = (elem.getAttribute && elem.getAttribute('type') || '').toLowerCase();
-				return (webshims.inputTypes[type]) ? type : elem.type;
-			}
-		}
-	});
-	
-	
-});;webshims.register('form-message', function($, webshims, window, document, undefined, options){
-	"use strict";
-	if(options.lazyCustomMessages){
-		options.customMessages = true;
-	}
-	var validityMessages = webshims.validityMessages;
-	
-	var implementProperties = options.customMessages ? ['customValidationMessage'] : [];
-	
-	validityMessages.en = $.extend(true, {
-		typeMismatch: {
-			defaultMessage: 'Please enter a valid value.',
-			email: 'Please enter an email address.',
-			url: 'Please enter a URL.'
-		},
-		badInput: {
-			defaultMessage: 'Please enter a valid value.',
-			number: 'Please enter a number.',
-			date: 'Please enter a date.',
-			time: 'Please enter a time.',
-			range: 'Invalid input.',
-			month: 'Please enter a valid value.',
-			"datetime-local": 'Please enter a datetime.'
-		},
-		rangeUnderflow: {
-			defaultMessage: 'Value must be greater than or equal to {%min}.'
-		},
-		rangeOverflow: {
-			defaultMessage: 'Value must be less than or equal to {%max}.'
-		},
-		stepMismatch: 'Invalid input.',
-		tooLong: 'Please enter at most {%maxlength} character(s). You entered {%valueLen}.',
-		tooShort: 'Please enter at least {%minlength} character(s). You entered {%valueLen}.',
-		patternMismatch: 'Invalid input. {%title}',
-		valueMissing: {
-			defaultMessage: 'Please fill out this field.',
-			checkbox: 'Please check this box if you want to proceed.'
-		}
-	}, (validityMessages.en || validityMessages['en-US'] || {}));
-	
-	if(typeof validityMessages['en'].valueMissing == 'object'){
-		['select', 'radio'].forEach(function(type){
-			validityMessages.en.valueMissing[type] = validityMessages.en.valueMissing[type] || 'Please select an option.';
-		});
-	}
-	if(typeof validityMessages.en.rangeUnderflow == 'object'){
-		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.en.rangeUnderflow[type] = validityMessages.en.rangeUnderflow[type] || 'Value must be at or after {%min}.';
-		});
-	}
-	if(typeof validityMessages.en.rangeOverflow == 'object'){
-		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.en.rangeOverflow[type] = validityMessages.en.rangeOverflow[type] || 'Value must be at or before {%max}.';
-		});
-	}
-	if(!validityMessages['en-US']){
-		validityMessages['en-US'] = $.extend(true, {}, validityMessages.en);
-	}
-	if(!validityMessages['en-GB']){
-		validityMessages['en-GB'] = $.extend(true, {}, validityMessages.en);
-	}
-	if(!validityMessages['en-AU']){
-		validityMessages['en-AU'] = $.extend(true, {}, validityMessages.en);
-	}
-	validityMessages[''] = validityMessages[''] || validityMessages['en-US'];
-	
-	validityMessages.de = $.extend(true, {
-		typeMismatch: {
-			defaultMessage: '{%value} ist in diesem Feld nicht zulässig.',
-			email: '{%value} ist keine gültige E-Mail-Adresse.',
-			url: '{%value} ist kein(e) gültige(r) Webadresse/Pfad.'
-		},
-		badInput: {
-			defaultMessage: 'Geben Sie einen zulässigen Wert ein.',
-			number: 'Geben Sie eine Nummer ein.',
-			date: 'Geben Sie ein Datum ein.',
-			time: 'Geben Sie eine Uhrzeit ein.',
-			month: 'Geben Sie einen Monat mit Jahr ein.',
-			range: 'Geben Sie eine Nummer.',
-			"datetime-local": 'Geben Sie ein Datum mit Uhrzeit ein.'
-		},
-		rangeUnderflow: {
-			defaultMessage: '{%value} ist zu niedrig. {%min} ist der unterste Wert, den Sie benutzen können.'
-		},
-		rangeOverflow: {
-			defaultMessage: '{%value} ist zu hoch. {%max} ist der oberste Wert, den Sie benutzen können.'
-		},
-		stepMismatch: 'Der Wert {%value} ist in diesem Feld nicht zulässig. Hier sind nur bestimmte Werte zulässig. {%title}',
-		tooLong: 'Der eingegebene Text ist zu lang! Sie haben {%valueLen} Zeichen eingegeben, dabei sind {%maxlength} das Maximum.',
-		tooShort: 'Der eingegebene Text ist zu kurz! Sie haben {%valueLen} Zeichen eingegeben, dabei sind {%minlength} das Minimum.',
-		patternMismatch: '{%value} hat für dieses Eingabefeld ein falsches Format. {%title}',
-		valueMissing: {
-			defaultMessage: 'Bitte geben Sie einen Wert ein.',
-			checkbox: 'Bitte aktivieren Sie das Kästchen.'
-		}
-	}, (validityMessages.de || {}));
-	
-	if(typeof validityMessages.de.valueMissing == 'object'){
-		['select', 'radio'].forEach(function(type){
-			validityMessages.de.valueMissing[type] = validityMessages.de.valueMissing[type] || 'Bitte wählen Sie eine Option aus.';
-		});
-	}
-	if(typeof validityMessages.de.rangeUnderflow == 'object'){
-		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.de.rangeUnderflow[type] = validityMessages.de.rangeUnderflow[type] || '{%value} ist zu früh. {%min} ist die früheste Zeit, die Sie benutzen können.';
-		});
-	}
-	if(typeof validityMessages.de.rangeOverflow == 'object'){
-		['date', 'time', 'datetime-local', 'month'].forEach(function(type){
-			validityMessages.de.rangeOverflow[type] = validityMessages.de.rangeOverflow[type] || '{%value} ist zu spät. {%max} ist die späteste Zeit, die Sie benutzen können.';
-		});
-	}
-	
-	var currentValidationMessage =  validityMessages[''];
-	var getMessageFromObj = function(message, elem){
-		if(message && typeof message !== 'string'){
-			message = message[ $.prop(elem, 'type') ] || message[ (elem.nodeName || '').toLowerCase() ] || message[ 'defaultMessage' ];
-		}
-		return message || '';
-	};
-	var valueVals = {
-		value: 1,
-		min: 1,
-		max: 1
-	};
-	
-	webshims.createValidationMessage = function(elem, name){
-		var widget;
-		var type = $.prop(elem, 'type');
-		var message = getMessageFromObj(currentValidationMessage[name], elem);
-		if(!message && name == 'badInput'){
-			message = getMessageFromObj(currentValidationMessage.typeMismatch, elem);
-		}
-		if(!message && name == 'typeMismatch'){
-			message = getMessageFromObj(currentValidationMessage.badInput, elem);
-		}
-		if(!message){
-			message = getMessageFromObj(validityMessages[''][name], elem) || $.prop(elem, 'validationMessage');
-			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+webshims.activeLang());
-		}
-		if(message){
-			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
-				if(message.indexOf('{%'+attr) === -1){return;}
-				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
-				if(name == 'patternMismatch' && attr == 'title' && !val){
-					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
-				}
-				if(valueVals[attr]){
-					if(!widget){
-						widget = $(elem).getShadowElement().data('wsWidget'+type);
-					}
-					if(widget && widget.formatValue){
-						val = widget.formatValue(val, false);
-					}
-				}
-				message = message.replace('{%'+ attr +'}', val);
-				if('value' == attr){
-					message = message.replace('{%valueLen}', val.length);
-				}
-				
-			});
-		}
-		
-		return message || '';
-	};
-	
-	
-	if(!Modernizr.formvalidation || webshims.bugs.bustedValidity){
-		implementProperties.push('validationMessage');
-	}
-	
-	currentValidationMessage = webshims.activeLang(validityMessages);
-		
-	$(validityMessages).on('change', function(e, data){
-		currentValidationMessage = validityMessages.__active;
-	});
-	
-	implementProperties.forEach(function(messageProp){
-		
-		webshims.defineNodeNamesProperty(['fieldset', 'output', 'button'], messageProp, {
-			prop: {
-				value: '',
-				writeable: false
-			}
-		});
-		['input', 'select', 'textarea'].forEach(function(nodeName){
-			var desc = webshims.defineNodeNameProperty(nodeName, messageProp, {
-				prop: {
-					get: function(){
-						var elem = this;
-						var message = '';
-						if(!$.prop(elem, 'willValidate')){
-							return message;
-						}
-						
-						var validity = $.prop(elem, 'validity') || {valid: 1};
-						
-						if(validity.valid){return message;}
-						message = webshims.getContentValidationMessage(elem, validity);
-						
-						if(message){return message;}
-						
-						if(validity.customError && elem.nodeName){
-							message = (Modernizr.formvalidation && !webshims.bugs.bustedValidity && desc.prop._supget) ? desc.prop._supget.call(elem) : webshims.data(elem, 'customvalidationMessage');
-							if(message){return message;}
-						}
-						$.each(validity, function(name, prop){
-							if(name == 'valid' || !prop){return;}
-							
-							message = webshims.createValidationMessage(elem, name);
-							if(message){
-								return false;
-							}
-						});
-						
-						return message || '';
-					},
-					writeable: false
-				}
-			});
-		});
-		
-	});
-});
-;webshims.register('form-number-date-api', function($, webshims, window, document, undefined, options){
+webshims.register('form-number-date-api', function($, webshims, window, document, undefined, options){
 	"use strict";
 	if(!webshims.addInputType){
 		webshims.error("you can not call forms-ext feature after calling forms feature. call both at once instead: $.webshims.polyfill('forms forms-ext')");
@@ -1037,5 +602,296 @@ webshims.register('form-native-extend', function($, webshims, window, doc, undef
 			}
 		});
 	}
+	
+});;webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
+	"use strict";
+	var doc = document;
+	var lazyLoad = function(name){
+		if(!name || typeof name != 'string'){
+			name = 'DOM';
+		}
+		if(!lazyLoad[name+'Loaded']){
+			lazyLoad[name+'Loaded'] = true;
+			webshims.ready(name, function(){
+				webshims.loader.loadList(['form-datalist-lazy']);
+			});
+		}
+	};
+	var noDatalistSupport = {
+		submit: 1,
+		button: 1,
+		reset: 1, 
+		hidden: 1,
+		
+		range: 1,
+		date: 1,
+		month: 1
+	};
+	if(webshims.modules["form-number-date-ui"].loaded){
+		$.extend(noDatalistSupport, {
+			number: 1,
+			time: 1
+		});
+	}
+	
+
+	/*
+	 * implement propType "element" currently only used for list-attribute (will be moved to dom-extend, if needed)
+	 */
+	webshims.propTypes.element = function(descs, name){
+		webshims.createPropDefault(descs, 'attr');
+		if(descs.prop){return;}
+		descs.prop = {
+			get: function(){
+				var elem = $.attr(this, name);
+				if(elem){
+					elem = document.getElementById(elem);
+					if(elem && descs.propNodeName && !$.nodeName(elem, descs.propNodeName)){
+						elem = null;
+					}
+				}
+				return elem || null;
+			},
+			writeable: false
+		};
+	};
+	
+	
+	/*
+	 * Implements datalist element and list attribute
+	 */
+	
+	(function(){
+		var formsCFG = $.webshims.cfg.forms;
+		var listSupport = Modernizr.input.list;
+		if(listSupport && !formsCFG.customDatalist){return;}
+		
+			var initializeDatalist =  function(){
+			
+			var updateDatlistAndOptions = function(){
+				var id;
+				if(!$.data(this, 'datalistWidgetData') && (id = $.prop(this, 'id'))){
+					$('input[list="'+ id +'"], input[data-wslist="'+ id +'"]').eq(0).attr('list', id);
+				} else {
+					$(this).triggerHandler('updateDatalist');
+				}
+			};
+				
+			var inputListProto = {
+				//override autocomplete
+				autocomplete: {
+					attr: {
+						get: function(){
+							var elem = this;
+							var data = $.data(elem, 'datalistWidget');
+							if(data){
+								return data._autocomplete;
+							}
+							return ('autocomplete' in elem) ? elem.autocomplete : elem.getAttribute('autocomplete');
+						},
+						set: function(value){
+							var elem = this;
+							var data = $.data(elem, 'datalistWidget');
+							if(data){
+								data._autocomplete = value;
+								if(value == 'off'){
+									data.hideList();
+								}
+							} else {
+								if('autocomplete' in elem){
+									elem.autocomplete = value;
+								} else {
+									elem.setAttribute('autocomplete', value);
+								}
+							}
+						}
+					}
+				}
+			};
+			
+			if(listSupport){
+				//options only return options, if option-elements are rooted: but this makes this part of HTML5 less backwards compatible
+				if(!($('<datalist><select><option></option></select></datalist>').prop('options') || []).length ){
+					webshims.defineNodeNameProperty('datalist', 'options', {
+						prop: {
+							writeable: false,
+							get: function(){
+								var options = this.options || [];
+								if(!options.length){
+									var elem = this;
+									var select = $('select', elem);
+									if(select[0] && select[0].options && select[0].options.length){
+										options = select[0].options;
+									}
+								}
+								return options;
+							}
+						}
+					});
+				}
+				inputListProto.list = {
+					attr: {
+						get: function(){
+							var val = webshims.contentAttr(this, 'list');
+							if(val != null){
+								$.data(this, 'datalistListAttr', val);
+								if(!noDatalistSupport[$.prop(this, 'type')] && !noDatalistSupport[$.attr(this, 'type')]){
+									this.removeAttribute('list');
+								}
+							} else {
+								val = $.data(this, 'datalistListAttr');
+							}
+							
+							return (val == null) ? undefined : val;
+						},
+						set: function(value){
+							var elem = this;
+							$.data(elem, 'datalistListAttr', value);
+							if (!noDatalistSupport[$.prop(this, 'type')] && !noDatalistSupport[$.attr(this, 'type')]) {
+								webshims.objectCreate(shadowListProto, undefined, {
+									input: elem,
+									id: value,
+									datalist: $.prop(elem, 'list')
+								});
+								elem.setAttribute('data-wslist', value);
+							} else {
+								elem.setAttribute('list', value);
+							}
+							$(elem).triggerHandler('listdatalistchange');
+						}
+					},
+					initAttr: true,
+					reflect: true,
+					propType: 'element',
+					propNodeName: 'datalist'
+				};
+			} else {
+				webshims.defineNodeNameProperties('input', {
+					list: {
+						attr: {
+							get: function(){
+								var val = webshims.contentAttr(this, 'list');
+								return (val == null) ? undefined : val;
+							},
+							set: function(value){
+								var elem = this;
+								webshims.contentAttr(elem, 'list', value);
+								webshims.objectCreate(options.shadowListProto, undefined, {input: elem, id: value, datalist: $.prop(elem, 'list')});
+								$(elem).triggerHandler('listdatalistchange');
+							}
+						},
+						initAttr: true,
+						reflect: true,
+						propType: 'element',
+						propNodeName: 'datalist'
+					}
+				});
+			}
+			
+			webshims.defineNodeNameProperties('input', inputListProto);
+			
+			webshims.addReady(function(context, contextElem){
+				contextElem
+					.filter('datalist > select, datalist, datalist > option, datalist > select > option')
+					.closest('datalist')
+					.each(updateDatlistAndOptions)
+				;
+			});
+		};
+		
+		
+		/*
+		 * ShadowList
+		 */
+		
+		var shadowListProto = {
+			_create: function(opts){
+				
+				if(noDatalistSupport[$.prop(opts.input, 'type')] || noDatalistSupport[$.attr(opts.input, 'type')]){return;}
+				var datalist = opts.datalist;
+				var data = $.data(opts.input, 'datalistWidget');
+				var that = this;
+				if(datalist && data && data.datalist !== datalist){
+					data.datalist = datalist;
+					data.id = opts.id;
+					
+					
+					$(data.datalist)
+						.off('updateDatalist.datalistWidget')
+						.on('updateDatalist.datalistWidget', $.proxy(data, '_resetListCached'))
+					;
+					
+					data._resetListCached();
+					return;
+				} else if(!datalist){
+					if(data){
+						data.destroy();
+					}
+					return;
+				} else if(data && data.datalist === datalist){
+					return;
+				}
+				
+				
+				
+				this.datalist = datalist;
+				this.id = opts.id;
+				this.hasViewableData = true;
+				this._autocomplete = $.attr(opts.input, 'autocomplete');
+				$.data(opts.input, 'datalistWidget', this);
+				$.data(datalist, 'datalistWidgetData', this);
+				
+				lazyLoad('WINDOWLOAD');
+				
+				if(webshims.isReady('form-datalist-lazy')){
+					this._lazyCreate(opts);
+				} else {
+					$(opts.input).one('focus', lazyLoad);
+					webshims.ready('form-datalist-lazy', function(){
+						if(!that._destroyed){
+							that._lazyCreate(opts);
+						}
+					});
+				}
+			},
+			destroy: function(e){
+				var input;
+				var autocomplete = $.attr(this.input, 'autocomplete');
+				$(this.input)
+					.off('.datalistWidget')
+					.removeData('datalistWidget')
+				;
+				this.shadowList.remove();
+				$(document).off('.datalist'+this.id);
+				$(window).off('.datalist'+this.id);
+				if(this.input.form && this.input.id){
+					$(this.input.form).off('submit.datalistWidget'+this.input.id);
+				}
+				this.input.removeAttribute('aria-haspopup');
+				if(autocomplete === undefined){
+					this.input.removeAttribute('autocomplete');
+				} else {
+					$(this.input).attr('autocomplete', autocomplete);
+				}
+				if(e && e.type == 'beforeunload'){
+					input = this.input;
+					setTimeout(function(){
+						$.attr(input, 'list', $.attr(input, 'list'));
+					}, 9);
+				}
+				this._destroyed = true;
+			}
+		};
+		
+		webshims.loader.addModule('form-datalist-lazy', {
+			noAutoCallback: true,
+			options: $.extend(options, {shadowListProto: shadowListProto})
+		});
+		if(!options.list){
+			options.list = {};
+		}
+		//init datalist update
+		initializeDatalist();
+	})();
 	
 });

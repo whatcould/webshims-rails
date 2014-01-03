@@ -6,13 +6,17 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	var webkitVersion = chromeBugs && parseFloat((navigator.userAgent.match(/Safari\/([\d\.]+)/) || ['', '999999'])[1], 10);
 	
 	var iVal = options.iVal;
-	var invalidClass = iVal.errorClass || 'user-error';
+	if(!iVal.fieldWrapper){
+		iVal.fieldWrapper = ':not(span), :not(label), :not(em), :not(strong), :not(p)'; 
+	}
+	var invalidClass = iVal.errorClass || (iVal.errorClass = 'user-error');
 	var validClass = iVal.successClass || 'user-success';
 	
-	var invalidWrapperClass = iVal.errorWrapperClass || 'ws-invalid';
-	var successWrapperClass = iVal.successWrapperClass || 'ws-success';
-	var errorBoxClass = iVal.errorBoxClass || 'ws-errorbox';
-	var errorMessageClass = iVal.errorMessageClass || 'ws-errormessage';
+	var invalidWrapperClass = iVal.errorWrapperClass || (iVal.errorWrapperClass = 'ws-invalid');
+	var successWrapperClass = iVal.successWrapperClass || (iVal.successWrapperClass = 'ws-success');
+	var errorBoxClass = iVal.errorBoxClass || (iVal.errorBoxClass = 'ws-errorbox');
+	var errorMessageClass = iVal.errorMessageClass || (iVal.errorMessageClass = 'ws-errormessage');
+	
 	var checkTypes = {checkbox: 1, radio: 1};
 	
 	var loader = webshims.loader;
@@ -295,8 +299,8 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				that.element.css('display', '');
 				that.timers.show = setTimeout(function(){
 					that.element.addClass('ws-po-visible').trigger('wspopovershow');
-				}, 9);
-			}, 9);
+				}, 14);
+			}, 4);
 			
 			$(document.body || document).on('focusin'+this.eventns+' mousedown'+this.eventns, function(e){
 				if(that.options.hideOnBlur && !that.stopBlur && !that.isInElement([that.lastElement[0], element[0], that.element[0]], e.target)){
@@ -514,7 +518,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	if(!$.fn[fx[iVal.fx].show]){
 		iVal.fx = 'no';
 	}
-	
+	var errorBoxId = 0;
 	webshims.errorbox = {
 		create: function(elem, fieldWrapper){
 			if(!fieldWrapper){
@@ -526,21 +530,18 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				errorBox = $('<div class="'+ errorBoxClass +'" hidden="hidden" style="display: none;">');
 				fieldWrapper.append(errorBox);
 			}
-			
+			if(!errorBox.prop('id')){
+				errorBoxId++;
+				errorBox.prop('id', 'errorbox-'+errorBoxId);
+			}
 			fieldWrapper.data('errorbox', errorBox);
 			return errorBox;
 		},
 		getFieldWrapper: function(elem){
 			var fieldWrapper;
-			if(iVal.fieldWrapper){
-				fieldWrapper = (typeof iVal.fieldWrapper == "function") ? iVal.fieldWrapper.apply(this, arguments) : $(elem).parent().closest(iVal.fieldWrapper);
-				if(!fieldWrapper.length){
-					fieldWrapper = false;
-					webshims.error("could not find fieldwrapper: "+ iVal.fieldWrapper);
-				}
-			}
-			if(!fieldWrapper){
-				fieldWrapper = $(elem).parent().closest(':not(span), :not(label), :not(em), :not(strong), :not(p)');
+			fieldWrapper = (typeof iVal.fieldWrapper == "function") ? iVal.fieldWrapper.apply(this, arguments) : $(elem).parent().closest(iVal.fieldWrapper);
+			if(!fieldWrapper.length){
+				webshims.error("could not find fieldwrapper: "+ iVal.fieldWrapper);
 			}
 			return fieldWrapper;
 		},
@@ -561,7 +562,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				}
 				return ret || 'defaultMessage';
 			};
-			$.each(["customError","badInput","typeMismatch","rangeUnderflow","rangeOverflow","stepMismatch","tooLong","tooShort","patternMismatch","valueMissing","tooShort"], function(i, name){
+			$.each(["customError","badInput","typeMismatch","rangeUnderflow","rangeOverflow","stepMismatch","tooLong","tooShort","patternMismatch","valueMissing"], function(i, name){
 				var cName = name.replace(/[A-Z]/, deCamelCase);
 				fields[name] = '.'+cName+', .'+name+', .'+(name).toLowerCase()+', [data-errortype="'+ name +'"]';
 			});
@@ -631,6 +632,9 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					fieldWrapper.removeClass(invalidWrapperClass);
 					errorBox.message = '';
 					errorBox[fx[iVal.fx].hide](function(){
+						if(this.id == elem.getAttribute('aria-describedby')){
+							elem.removeAttribute('aria-describedby');
+						}
 						$(this).attr({hidden: 'hidden'});
 					});
 				}
@@ -669,16 +673,20 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				if(box.stop){
 					box.stop(true, true);
 				}
-				box.html('<p class="'+ errorMessageClass +'"">'+ message +'</p>');
+				box.html('<p class="'+ errorMessageClass +'">'+ message +'</p>');
 				box.message = message;
 				fieldWrapper.addClass(invalidWrapperClass).removeClass(successWrapperClass);
 				this.recheckInvalidInput(elem);
 				if(box.is('[hidden]') || box.css('display') == 'none'){
+					if(!elem.getAttribute('aria-describedby')){
+						elem.setAttribute('aria-describedby', box.prop('id'));
+					}
 					box
 						.css({display: 'none'})
 						.removeAttr('hidden')
 						[fx[iVal.fx].show]()
 					;
+					
 				}
 			}
 			fieldWrapper.removeClass(successWrapperClass);
@@ -744,8 +752,9 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	
 	if(options.replaceValidationUI){
 		$(document).on('firstinvalid', function(e){
-			if(!e.isInvalidUIPrevented()){
+			if(!e.isDefaultPrevented()){
 				e.preventDefault();
+				
 				setTimeout(function(){
 					webshims.validityAlert.showFor( e.target ); 
 				}, 4);
@@ -769,9 +778,6 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			if(!firstEvent){
 				//trigger firstinvalid
 				firstEvent = $.Event('firstinvalid');
-				firstEvent.isInvalidUIPrevented = e.isDefaultPrevented;
-				var firstSystemInvalid = $.Event('firstinvalidsystem');
-				$(document).triggerHandler(firstSystemInvalid, {element: e.target, form: e.target.form, isInvalidUIPrevented: e.isDefaultPrevented});
 				jElm.trigger(firstEvent);
 			}
 
@@ -930,15 +936,21 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			}
 		});
 	}
-	
+	if(webshims.cfg.debug !== false){
+		$(function(){
+			if($('form.ws-instantvalidation').length){
+				webshims.error('.ws-instantvalidation was renamed to .ws-validate');
+			}
+		});
+	}
 	addModule('form-combat', {
 		d: ['dom-support'],
-		test: ! (($.mobile && ($.mobile.selectmenu || $.mobile.checkboxradio)) || $.fn.select2 || $.fn.chosen || $.fn.selectpicker || $.fn.selectBoxIt)
+		test: !(($.mobile && ($.mobile.selectmenu || $.mobile.checkboxradio)) || $.fn.select2 || $.fn.chosen || $.fn.selectpicker || $.fn.selectBoxIt)
 	});
 	
 	addModule('position', {
 		src: 'plugins/jquery.ui.position.js',
-		test:!! ($.position && $.position.getScrollInfo)
+		test: !!($.position && $.position.getScrollInfo)
 	});
 	
 	loader.loadList(['form-combat', 'position']);

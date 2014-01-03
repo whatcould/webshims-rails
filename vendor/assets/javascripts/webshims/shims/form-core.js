@@ -1,3 +1,4 @@
+
 webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
 
@@ -62,6 +63,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 	
 	var extendSels = function(){
+		var matches, matchesOverride;
 		var exp = $.expr[":"];
 		$.extend(exp, {
 			"valid-element": function(elem){
@@ -86,7 +88,15 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		});
 		
 		// sizzle/jQuery has a bug with :disabled/:enabled selectors
-		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><fieldset>').find('input').is(':disabled')){
+		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><input /></fieldset>').find(':disabled').filter(':disabled').is(':disabled')){
+			matches = $.find.matches;
+			matchesOverride = {':disabled': 1, ':enabled': 1};
+			$.find.matches = function(expr, elements){
+				if(matchesOverride[expr]){
+					return matches.call(this, '*'+expr, elements);
+				}
+				return matches.apply(this, arguments);
+			};
 			$.extend(exp, {
 				"enabled": function( elem ) {
 					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
@@ -190,7 +200,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		if(webshims.errorbox && webshims.errorbox.initIvalContentMessage){
 			webshims.errorbox.initIvalContentMessage(elem);
 		}
-		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage') : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
+		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage', false, true) : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
 		} else if(message) {
@@ -241,5 +251,4 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 	});
 	webshims.ready('WINDOWLOAD', lazyLoad);
-	
 });

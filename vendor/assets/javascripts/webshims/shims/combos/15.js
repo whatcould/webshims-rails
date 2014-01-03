@@ -40,34 +40,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.ready('WINDOWLOAD', switch$);
 		
 	}
-//	(function(){
-//		var hostNames = {
-//			'afarkas.github.io': 1,
-//			localhost: 1,
-//			'127.0.0.1': 1
-//		};
-//		
-//		if( webshims.cfg.debug && (hostNames[location.hostname] || location.protocol == 'file:') ){
-//			var list = $('<ul class="webshims-debug-list" />');
-//			webshims.errorLog.push = function(message){
-//				list.appendTo('body');
-//				$('<li style="display: none;">'+ message +'</li>')
-//					.appendTo(list)
-//					.slideDown()
-//					.delay(3000)
-//					.slideUp(function(){
-//						$(this).remove();
-//						if(!$('li', list).length){
-//							list.detach();
-//						}
-//					})
-//				;
-//			};
-//			$.each(webshims.errorLog, function(i, message){
-//				webshims.errorLog.push(message);
-//			});
-//		}
-//	})();
 
 	//shortcus
 	var modules = webshims.modules;
@@ -509,11 +481,22 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			});
 		},
 		getOptions: (function(){
+			var normalName = /\-([a-z])/g;
 			var regs = {};
+			var nameRegs = {};
 			var regFn = function(f, upper){
 				return upper.toLowerCase();
 			};
-			return function(elem, name, bases){
+			var nameFn = function(f, dashed){
+				return dashed.toUpperCase();
+			};
+			return function(elem, name, bases, stringAllowed){
+				if(nameRegs[name]){
+					name = nameRegs[name];
+				} else {
+					nameRegs[name] = name.replace(normalName, nameFn);
+					name = nameRegs[name];
+				}
 				var data = elementData(elem, 'cfg'+name);
 				var dataName;
 				var cfg = {};
@@ -522,7 +505,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					return data;
 				}
 				data = $(elem).data();
-				
+				if(data && typeof data[name] == 'string'){
+					if(stringAllowed){
+						return elementData(elem, 'cfg'+name, data[name]);
+					}
+					webshims.error('data-'+ name +' attribute has to be a valid JSON, was: '+ data[name]);
+				}
 				if(!bases){
 					bases = [true, {}];
 				} else if(!Array.isArray(bases)){
@@ -531,12 +519,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					bases.unshift(true, {});
 				}
 				
-				if(data && data[name]){
-					if(typeof data[name] == 'object'){
-						bases.push(data[name]);
-					} else {
-						webshims.error('data-'+ name +' attribute has to be a valid JSON, was: '+ data[name]);
-					}
+				if(data && typeof data[name] == 'object'){
+					bases.push(data[name]);
 				}
 				
 				if(!regs[name]){
@@ -549,7 +533,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				}
 				bases.push(cfg);
-				
 				return elementData(elem, 'cfg'+name, $.extend.apply($, bases));
 			};
 		})(),
@@ -579,7 +562,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			var resizeTimer;
 			var lastHeight;
 			var lastWidth;
-			
+			var $window = $(window);
 			var docObserve = {
 				init: false,
 				runs: 0,
@@ -599,25 +582,36 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						docObserve.runs = 0;
 					}
 				},
-				handler: function(e){
-					clearTimeout(resizeTimer);
-					resizeTimer = setTimeout(function(){
-						if(e.type == 'resize'){
-							var width = $(window).width();
-							var height = $(window).width();
-							if(height == lastHeight && width == lastWidth){
-								return;
-							}
-							lastHeight = height;
-							lastWidth = width;
-							
-							docObserve.height = docObserve.getHeight();
-							docObserve.width = docObserve.getWidth();
-							
-						}
+				handler: (function(){
+					var trigger = function(){
 						$(document).triggerHandler('updateshadowdom');
-					}, (e.type == 'resize') ? 50 : 9);
-				},
+					};
+					return function(e){
+						clearTimeout(resizeTimer);
+						resizeTimer = setTimeout(function(){
+							if(e.type == 'resize'){
+								var width = $window.width();
+								var height = $window.width();
+
+								if(height == lastHeight && width == lastWidth){
+									return;
+								}
+								lastHeight = height;
+								lastWidth = width;
+								
+								docObserve.height = docObserve.getHeight();
+								docObserve.width = docObserve.getWidth();
+							}
+
+							if(window.requestAnimationFrame){
+								requestAnimationFrame(trigger);
+							} else {
+								setTimeout(trigger, 0);
+							}
+							
+						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 0);
+					};
+				})(),
 				_create: function(){
 					$.each({ Height: "getHeight", Width: "getWidth" }, function(name, type){
 						var body = document.body;
@@ -955,13 +949,17 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			webshims.defineNodeNamesProperty(elementNames, prop, {
 				attr: {
 					set: function(val){
-						this.setAttribute(prop, val);
+						if(descs.useContentAttribute){
+							webshims.contentAttr(this, prop, val);
+						} else {
+							this.setAttribute(prop, val);
+						}
 						if(descs.set){
 							descs.set.call(this, true);
 						}
 					},
 					get: function(){
-						var ret = this.getAttribute(prop);
+						var ret = (descs.useContentAttribute) ? webshims.contentAttr(this, prop) : this.getAttribute(prop);
 						return (ret == null) ? undefined : prop;
 					}
 				},
@@ -1018,6 +1016,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					});
 				}
 			};
+			
 			var select = function(obj){
 				var oldLang = obj.__active;
 				var selectLang = function(i, lang){
@@ -1025,6 +1024,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					if(obj[lang] || obj.availableLangs.indexOf(lang) != -1){
 						if(obj[lang]){
 							obj.__active = obj[lang];
+							obj.__activeName = lang;
 						} else {
 							load(obj.langSrc+lang, obj, curLang.join());
 						}
@@ -1034,6 +1034,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				$.each(curLang, selectLang);
 				if(!obj.__active){
 					obj.__active = obj[''];
+					obj.__activeName = '';
 				}
 				if(oldLang != obj.__active){
 					$(obj).trigger('change');
@@ -1138,7 +1139,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(webshims.$, document);
+})(webshims.$, document);;
 webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
 
@@ -1203,6 +1204,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 	
 	var extendSels = function(){
+		var matches, matchesOverride;
 		var exp = $.expr[":"];
 		$.extend(exp, {
 			"valid-element": function(elem){
@@ -1227,7 +1229,15 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		});
 		
 		// sizzle/jQuery has a bug with :disabled/:enabled selectors
-		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><fieldset>').find('input').is(':disabled')){
+		if(Modernizr.fieldsetdisabled && !$('<fieldset disabled=""><input /><input /></fieldset>').find(':disabled').filter(':disabled').is(':disabled')){
+			matches = $.find.matches;
+			matchesOverride = {':disabled': 1, ':enabled': 1};
+			$.find.matches = function(expr, elements){
+				if(matchesOverride[expr]){
+					return matches.call(this, '*'+expr, elements);
+				}
+				return matches.apply(this, arguments);
+			};
 			$.extend(exp, {
 				"enabled": function( elem ) {
 					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
@@ -1331,7 +1341,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		if(webshims.errorbox && webshims.errorbox.initIvalContentMessage){
 			webshims.errorbox.initIvalContentMessage(elem);
 		}
-		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage') : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
+		var message = (webshims.getOptions && webshims.errorbox ? webshims.getOptions(elem, 'errormessage', false, true) : $(elem).data('errormessage')) || elem.getAttribute('x-moz-errormessage') || '';
 		if(key && message[key]){
 			message = message[key];
 		} else if(message) {
@@ -1382,10 +1392,8 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 	});
 	webshims.ready('WINDOWLOAD', lazyLoad);
-	
 });
-
-webshims.register('form-shim-extend', function($, webshims, window, document, undefined, options){
+;webshims.register('form-shim-extend', function($, webshims, window, document, undefined, options){
 "use strict";
 webshims.inputTypes = webshims.inputTypes || {};
 //some helper-functions
@@ -2179,8 +2187,7 @@ switch(desc.proptype) {
 webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors);
 
 }); //webshims.ready end
-
-webshims.register('form-message', function($, webshims, window, document, undefined, options){
+;webshims.register('form-message', function($, webshims, window, document, undefined, options){
 	"use strict";
 	if(options.lazyCustomMessages){
 		options.customMessages = true;
@@ -2404,8 +2411,7 @@ webshims.register('form-message', function($, webshims, window, document, undefi
 		
 	});
 });
-
-webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
+;webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
 	"use strict";
 	var doc = document;
 	var lazyLoad = function(name){

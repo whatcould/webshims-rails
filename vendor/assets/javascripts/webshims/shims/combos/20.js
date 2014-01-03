@@ -1444,8 +1444,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 })(webshims.$, webshims);
 
 
-
-//DOM-Extension helper
+;//DOM-Extension helper
 webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
 	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
@@ -1487,34 +1486,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		webshims.ready('WINDOWLOAD', switch$);
 		
 	}
-//	(function(){
-//		var hostNames = {
-//			'afarkas.github.io': 1,
-//			localhost: 1,
-//			'127.0.0.1': 1
-//		};
-//		
-//		if( webshims.cfg.debug && (hostNames[location.hostname] || location.protocol == 'file:') ){
-//			var list = $('<ul class="webshims-debug-list" />');
-//			webshims.errorLog.push = function(message){
-//				list.appendTo('body');
-//				$('<li style="display: none;">'+ message +'</li>')
-//					.appendTo(list)
-//					.slideDown()
-//					.delay(3000)
-//					.slideUp(function(){
-//						$(this).remove();
-//						if(!$('li', list).length){
-//							list.detach();
-//						}
-//					})
-//				;
-//			};
-//			$.each(webshims.errorLog, function(i, message){
-//				webshims.errorLog.push(message);
-//			});
-//		}
-//	})();
 
 	//shortcus
 	var modules = webshims.modules;
@@ -1956,11 +1927,22 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			});
 		},
 		getOptions: (function(){
+			var normalName = /\-([a-z])/g;
 			var regs = {};
+			var nameRegs = {};
 			var regFn = function(f, upper){
 				return upper.toLowerCase();
 			};
-			return function(elem, name, bases){
+			var nameFn = function(f, dashed){
+				return dashed.toUpperCase();
+			};
+			return function(elem, name, bases, stringAllowed){
+				if(nameRegs[name]){
+					name = nameRegs[name];
+				} else {
+					nameRegs[name] = name.replace(normalName, nameFn);
+					name = nameRegs[name];
+				}
 				var data = elementData(elem, 'cfg'+name);
 				var dataName;
 				var cfg = {};
@@ -1969,7 +1951,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					return data;
 				}
 				data = $(elem).data();
-				
+				if(data && typeof data[name] == 'string'){
+					if(stringAllowed){
+						return elementData(elem, 'cfg'+name, data[name]);
+					}
+					webshims.error('data-'+ name +' attribute has to be a valid JSON, was: '+ data[name]);
+				}
 				if(!bases){
 					bases = [true, {}];
 				} else if(!Array.isArray(bases)){
@@ -1978,12 +1965,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					bases.unshift(true, {});
 				}
 				
-				if(data && data[name]){
-					if(typeof data[name] == 'object'){
-						bases.push(data[name]);
-					} else {
-						webshims.error('data-'+ name +' attribute has to be a valid JSON, was: '+ data[name]);
-					}
+				if(data && typeof data[name] == 'object'){
+					bases.push(data[name]);
 				}
 				
 				if(!regs[name]){
@@ -1996,7 +1979,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				}
 				bases.push(cfg);
-				
 				return elementData(elem, 'cfg'+name, $.extend.apply($, bases));
 			};
 		})(),
@@ -2026,7 +2008,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			var resizeTimer;
 			var lastHeight;
 			var lastWidth;
-			
+			var $window = $(window);
 			var docObserve = {
 				init: false,
 				runs: 0,
@@ -2046,25 +2028,36 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						docObserve.runs = 0;
 					}
 				},
-				handler: function(e){
-					clearTimeout(resizeTimer);
-					resizeTimer = setTimeout(function(){
-						if(e.type == 'resize'){
-							var width = $(window).width();
-							var height = $(window).width();
-							if(height == lastHeight && width == lastWidth){
-								return;
-							}
-							lastHeight = height;
-							lastWidth = width;
-							
-							docObserve.height = docObserve.getHeight();
-							docObserve.width = docObserve.getWidth();
-							
-						}
+				handler: (function(){
+					var trigger = function(){
 						$(document).triggerHandler('updateshadowdom');
-					}, (e.type == 'resize') ? 50 : 9);
-				},
+					};
+					return function(e){
+						clearTimeout(resizeTimer);
+						resizeTimer = setTimeout(function(){
+							if(e.type == 'resize'){
+								var width = $window.width();
+								var height = $window.width();
+
+								if(height == lastHeight && width == lastWidth){
+									return;
+								}
+								lastHeight = height;
+								lastWidth = width;
+								
+								docObserve.height = docObserve.getHeight();
+								docObserve.width = docObserve.getWidth();
+							}
+
+							if(window.requestAnimationFrame){
+								requestAnimationFrame(trigger);
+							} else {
+								setTimeout(trigger, 0);
+							}
+							
+						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 0);
+					};
+				})(),
 				_create: function(){
 					$.each({ Height: "getHeight", Width: "getWidth" }, function(name, type){
 						var body = document.body;
@@ -2402,13 +2395,17 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			webshims.defineNodeNamesProperty(elementNames, prop, {
 				attr: {
 					set: function(val){
-						this.setAttribute(prop, val);
+						if(descs.useContentAttribute){
+							webshims.contentAttr(this, prop, val);
+						} else {
+							this.setAttribute(prop, val);
+						}
 						if(descs.set){
 							descs.set.call(this, true);
 						}
 					},
 					get: function(){
-						var ret = this.getAttribute(prop);
+						var ret = (descs.useContentAttribute) ? webshims.contentAttr(this, prop) : this.getAttribute(prop);
 						return (ret == null) ? undefined : prop;
 					}
 				},
@@ -2465,6 +2462,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					});
 				}
 			};
+			
 			var select = function(obj){
 				var oldLang = obj.__active;
 				var selectLang = function(i, lang){
@@ -2472,6 +2470,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					if(obj[lang] || obj.availableLangs.indexOf(lang) != -1){
 						if(obj[lang]){
 							obj.__active = obj[lang];
+							obj.__activeName = lang;
 						} else {
 							load(obj.langSrc+lang, obj, curLang.join());
 						}
@@ -2481,6 +2480,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				$.each(curLang, selectLang);
 				if(!obj.__active){
 					obj.__active = obj[''];
+					obj.__activeName = '';
 				}
 				if(oldLang != obj.__active){
 					$(obj).trigger('change');
@@ -2585,8 +2585,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(webshims.$, document);
-(function(Modernizr, webshims){
+})(webshims.$, document);;(function(Modernizr, webshims){
 	"use strict";
 	var $ = webshims.$;
 	var hasNative = Modernizr.audio && Modernizr.video;
@@ -3279,8 +3278,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	}
 	webshims.ready('track', loadTrackUi);
 });
-})(Modernizr, webshims);
-webshims.register('mediaelement-jaris', function($, webshims, window, document, undefined, options){
+})(Modernizr, webshims);;webshims.register('mediaelement-jaris', function($, webshims, window, document, undefined, options){
 	"use strict";
 	
 	var mediaelement = webshims.mediaelement;
