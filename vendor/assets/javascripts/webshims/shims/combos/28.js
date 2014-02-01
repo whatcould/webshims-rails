@@ -222,6 +222,9 @@ $.event.special.invalid = {
 		var notValid = !($(e.target).callProp('reportValidity'));
 		if(notValid){
 			e.stopImmediatePropagation();
+			if(!options.noFormInvalid){
+				$(e.target).trigger('invalid');
+			}
 			return false;
 		}
 	}
@@ -1862,7 +1865,13 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 				lazyLoad('WINDOWLOAD');
 				
 				if(webshims.isReady('form-datalist-lazy')){
-					this._lazyCreate(opts);
+					if(window.QUnit){
+						that._lazyCreate(opts);
+					} else {
+						setTimeout(function(){
+							that._lazyCreate(opts);
+						}, 9);
+					}
 				} else {
 					$(opts.input).one('focus', lazyLoad);
 					webshims.ready('form-datalist-lazy', function(){

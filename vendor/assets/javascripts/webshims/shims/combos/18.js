@@ -2066,8 +2066,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		_create: function(){
 			var i;
 			
-			
-			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb" /></span>');
+			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span data-value="" data-valuetext="" /></span></span>');
 			this.trail = $('.ws-range-track', this.element);
 			this.range = $('.ws-range-progress', this.element);
 			this.thumb = $('.ws-range-thumb', this.trail);
@@ -2089,7 +2088,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		},
 		value: $.noop,
 		_value: function(val, _noNormalize, animate){
-			var left, posDif, textValue;
+			var left, posDif;
 			var o = this.options;
 			var oVal = val;
 			var thumbStyle = {};
@@ -2105,7 +2104,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			left =  100 * ((val - o.min) / (o.max - o.min));
 			
 			if(this._init && val == o.value && oVal == val){return;}
-			this.options.value = val;
+			o.value = val;
 			
 			if($.fn.stop){
 				this.thumb.stop();
@@ -2113,6 +2112,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			}
 			
 			rangeStyle[this.dirs.width] = left+'%';
+			
 			if(this.vertical){
 				left = Math.abs(left - 100);
 			}
@@ -2139,15 +2139,26 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				this.options._change(val);
 			}
 			
-			textValue = this.options.textValue ? this.options.textValue(this.options.value) : this.options.options[this.options.value] || this.options.value;
+			this._setValueMarkup();
+		},
+		_setValueMarkup: function(){
+			var o = this.options;
+			var textValue = o.textValue ? o.textValue(this.options.value) : o.options[o.value] || o.value;
 			this.element.attr({
 				'aria-valuenow': this.options.value,
 				'aria-valuetext': textValue
 			});
-			this.thumb.attr({
+			$('span', this.thumb).attr({
 				'data-value': this.options.value,
 				'data-valuetext': textValue
 			});
+			if(o.selectedOption){
+				$(o.selectedOption).removeClass('ws-selected-option');
+				o.selectedOption = null;
+			}
+			if(o.value in o.options){
+				o.selectedOption = $('[data-value="'+o.value+'"].ws-range-ticks').addClass('ws-selected-option');
+			}
 		},
 		initDataList: function(){
 			if(this.orig){
@@ -2190,9 +2201,9 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			$.each(o.options, function(val, label){
 				if(!isNumber(val) || val < min || val > max){return;}
 				var left = 100 * ((val - min) / (max - min));
-				var attr = '';
+				var attr = 'data-value="'+val+'"';
 				if(label){
-					attr += 'data-label="'+label+'"';
+					attr += ' data-label="'+label+'"';
 					if(o.showLabels){
 						attr += ' title="'+label+'"';
 					}
@@ -2205,6 +2216,9 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					$('<span class="ws-range-ticks"'+ attr +' style="'+(that.dirs.left)+': '+left+'%;" />').appendTo(trail)
 				);
 			});
+			if(o.value in o.options){
+				this._setValueMarkup();
+			}
 		},
 		readonly: function(val){
 			val = !!val;
@@ -2248,12 +2262,13 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			var step = val == 'any' ? 'any' : retDefault(val, 1);
 			
 			if(o.stepping){
-				if(step != 'any' && o.stepping % step){
-					webshims.error('wrong stepping value for type range:'+ (o.stepping % step));
-				} else {
-					step = o.stepping;
-				}
+				webshims.error('stepping was removed. Use stepfactor instead.');
 			}
+
+			if(o.stepfactor && step != 'any'){
+				step *= o.stepfactor;
+			}
+
 			o.step = step;
 			this.value(this.options.value);
 		},
@@ -2291,11 +2306,11 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			var val, valModStep, alignValue, step;
 			
 			if(pos <= 0){
-				val = this.options[this.dirs.min];
+				val = this.options[this.dirs[this.isRtl ? 'max' : 'min']];
 			} else if(pos > 100) {
-				val = this.options[this.dirs.max];
+				val = this.options[this.dirs[this.isRtl ? 'min' : 'max']];
 			} else {
-				if(this.vertical){
+				if(this.vertical || this.isRtl){
 					pos = Math.abs(pos - 100);
 				}
 				val = ((this.options.max - this.options.min) * (pos / 100)) + this.options.min;
@@ -2380,17 +2395,20 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					return e;
 				};
 			})();
+			var updateValue = function(val, animate){
+				if(val != o.value){
+					that.value(val, false, animate);
+					eventTimer.call('input', val);
+				}
+			};
 			var setValueFromPos = function(e, animate){
 				if(e.type == 'touchmove'){
 					e.preventDefault();
 					normalizeTouch(e);
 				}
 				
-				var val = that.getStepedValueFromPos((e[that.dirs.mouse] - leftOffset) * widgetUnits);
-				if(val != o.value){
-					that.value(val, false, animate);
-					eventTimer.call('input', val);
-				}
+				updateValue(that.getStepedValueFromPos((e[that.dirs.mouse] - leftOffset) * widgetUnits), animate);
+				
 				if(e && e.type == 'mousemove'){
 					e.preventDefault();
 				}
@@ -2428,7 +2446,12 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					outerWidth = that.thumb[that.dirs.outerWidth]();
 					leftOffset = leftOffset[that.dirs.pos];
 					widgetUnits = 100 / widgetUnits;
-					setValueFromPos(e, o.animate);
+
+					if(e.target.className == 'ws-range-ticks'){
+						updateValue(e.target.getAttribute('data-value'), o.animate);
+					} else {
+						setValueFromPos(e, o.animate);
+					}
 					isActive = true;
 					$(document)
 						.on(e.type == 'touchstart' ?
@@ -2474,6 +2497,13 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					var step = true;
 					var code = e.keyCode;
 					if(!o.readonly && !o.disabled){
+						if(that.isRtl){
+							if(code == 39){
+								code = 37;
+							} else if(code == 37){
+								code = 39;
+							}
+						}
 						if (code == 39 || code == 38) {
 							that.doStep(1);
 						} else if (code == 37 || code == 40) {
@@ -2573,10 +2603,17 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				{mouse: 'pageY', pos: 'top', min: 'max', max: 'min', left: 'top', right: 'bottom', width: 'height', innerWidth: 'innerHeight', innerHeight: 'innerWidth', outerWidth: 'outerHeight', outerHeight: 'outerWidth', marginTop: 'marginLeft', marginLeft: 'marginTop'} :
 				{mouse: 'pageX', pos: 'left', min: 'min', max: 'max', left: 'left', right: 'right', width: 'width', innerWidth: 'innerWidth', innerHeight: 'innerHeight', outerWidth: 'outerWidth', outerHeight: 'outerHeight', marginTop: 'marginTop', marginLeft: 'marginLeft'}
 			;
+			if(!this.vertical && this.element.css('direction') == 'rtl'){
+				this.isRtl = true;
+				this.dirs.left = 'right';
+				this.dirs.right = 'left';
+				this.dirs.marginLeft = 'marginRight';
+			}
 			this.element
 				[this.vertical ? 'addClass' : 'removeClass']('vertical-range')
-				[this.vertical ? 'addClass' : 'removeClass']('horizontal-range')
+				[this.isRtl ? 'addClass' : 'removeClass']('ws-is-rtl')
 			;
+			this.updateMetrics = this.posCenter;
 			this.posCenter();
 		}
 	};
@@ -2613,7 +2650,8 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 	if(window.webshims && webshims.isReady){
 		webshims.isReady('range-ui', true);
 	}
-})(window.webshims ? webshims.$ : jQuery);;webshims.register('form-number-date-ui', function($, webshims, window, document, undefined, options){
+})(window.webshims ? webshims.$ : jQuery);
+;webshims.register('form-number-date-ui', function($, webshims, window, document, undefined, options){
 	"use strict";
 	var curCfg;
 	var formcfg = webshims.formcfg;
@@ -2623,9 +2661,9 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		e.stopImmediatePropagation();
 	};
 	var getMonthOptions = function(opts){
-		var selectName = 'monthSelect'+opts.formatMonthNames;
+		var selectName = 'monthSelect'+opts.monthNames;
 		if(!curCfg[selectName]){
-			var labels = curCfg.date[opts.formatMonthNames] || monthDigits;
+			var labels = curCfg.date[opts.monthNames] || monthDigits;
 			curCfg[selectName] = ('<option value=""></option>')+$.map(monthDigits, function(val, i){
 				return '<option value="'+val+'"]>'+labels[i]+'</option>';
 			}).join('');
@@ -2650,12 +2688,38 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			curCfg.patterns[name+'Obj'] = obj;
 		}
 	};
+	var createYearSelect = function(obj, opts){
+		var options, nowY, max, min;
+		if(opts.yearSelect){
+			nowY = parseInt(opts.value.split('-')[0], 10);
+			max = opts.max.split('-');
+			min = opts.min.split('-');
+			options = webshims.picker.createYearSelect(nowY || parseInt(min[0], 10) || parseInt(max[0], 10) || nowYear, max, min);
+			options.unshift('<option />');
+			$(obj.elements)
+				.filter('select.yy')
+				.html(options.join(''))
+				.each(function(){
+					if(!nowY){
+						$('option[selected]', this).removeAttr('selected');
+						$(this).val();
+					}
+				})
+			;
+		}
+	};
 	var splitInputs = {
 		date: {
 			_create: function(opts){
 				var obj = {
-					splits: [$('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]] 
+					splits: [] 
 				};
+				
+				if(opts.yearSelect){
+					obj.splits.push($('<select class="yy"></select>')[0]);
+				} else {
+					obj.splits.push($('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
+				}
 				
 				if(opts.monthSelect){
 					obj.splits.push($('<select class="mm">'+getMonthOptions(opts)+'</select>')[0]);
@@ -2669,6 +2733,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				}
 				
 				obj.elements = [obj.splits[0], $('<span class="ws-input-seperator" />')[0], obj.splits[1], $('<span class="ws-input-seperator" />')[0], obj.splits[2]];
+				createYearSelect(obj, opts);
 				return obj;
 			},
 			sort: function(element){
@@ -2693,8 +2758,15 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			_create: function(opts){
 				
 				var obj = {
-					splits: [$('<input type="text" class="yy" inputmode="numeric" size="4" />')[0]] 
+					splits: [] 
 				};
+				
+				if(opts.yearSelect){
+					obj.splits.push($('<select class="yy"></select>')[0]);
+				} else {
+					obj.splits.push($('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
+				}
+				
 				if(opts.monthSelect){
 					obj.splits.push($('<select class="mm">'+getMonthOptions(opts)+'</select>')[0]);
 				} else {
@@ -2705,6 +2777,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				}
 				
 				obj.elements = [obj.splits[0], $('<span class="ws-input-seperator" />')[0], obj.splits[1]];
+				createYearSelect(obj, opts);
 				return obj;
 			},
 			sort: function(element){
@@ -2724,7 +2797,8 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 	};
 	
 	var nowDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000 ));
-	nowDate = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), nowDate.getHours()).getTime()
+	var nowYear = nowDate.getFullYear();
+	nowDate = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), nowDate.getHours()).getTime();
 	var steps = {
 		number: {
 			step: 1
@@ -2934,9 +3008,6 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			$(document).triggerHandler('wslocalechange');
 		};
 		
-		
-		
-		
 		curCfg = webshims.activeLang(formcfg);
 		
 		triggerLocaleChange();
@@ -2961,7 +3032,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		
 		
 		var formatVal = {
-			number: function(val){
+			number: function(val, o){
 				return (val+'').replace(/\,/g, '').replace(/\./, curCfg.numberFormat['.']);
 			},
 			time: function(val){
@@ -2998,7 +3069,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				var names;
 				var p = val.split('-');
 				if(p[0] && p[1]){
-					names = curCfg.date[options.formatMonthNames] || curCfg.date[options.monthNames] || curCfg.date.monthNames;
+					names = curCfg.date[options.monthNames] || curCfg.date.monthNames;
 					p[1] = names[(p[1] * 1) - 1];
 					if(options && options.splitInput){
 						val = [p[0] || '', p[1] || ''];
@@ -3319,7 +3390,15 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					})
 					.on({
 						'change input focus focusin blur focusout': function(e){
+							var oVal, nVal;
 							$(e.target).trigger('ws__'+e.type);
+							if(o.toFixed && o.type == 'number' && e.type == 'change'){
+								oVal = that.element.prop('value');
+								nVal = that.toFixed(oVal, true);
+								if(oVal != nVal){
+									that.element[0].value = nVal;
+								}
+							}
 						}
 					})
 					
@@ -3468,11 +3547,14 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					this.inputElements.attr('inputmode', 'numeric');
 				}
 				
-				
-				
 				if((!o.max && typeof o.relMax == 'number') || (!o.min && typeof o.relMin == 'number')){
-					webshims.error('relMax/relMin are not supported anymore')
+					webshims.error('relMax/relMin are not supported anymore calculate at set it your own.');
 				}
+
+				if(this.options.relDefaultValue){
+					webshims.warn('relDefaultValue was removed use startValue instead!');
+				}
+
 				this._init = true;
 			},
 			createOpts: ['step', 'min', 'max', 'readonly', 'title', 'disabled', 'tabindex', 'placeholder', 'defaultValue', 'value', 'required'],
@@ -3483,17 +3565,9 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					this.inputElements = $(create.elements).prependTo(this.element).filter('input, select');
 				}
 			},
-			
-			getRelNumber: function(rel){
-				var start = steps[this.type].start || 0;
-				if(rel){
-					start += rel;
-				}
-				return start;
-			},
 			addZero: addZero,
 			_setStartInRange: function(){
-				var start = this.getRelNumber(this.options.relDefaultValue);
+				var start = this.options.startValue && this.asNumber( this.options.startValue ) || steps[this.type].start || 0;
 				if(!isNaN(this.minAsNumber) && start < this.minAsNumber){
 					start = this.minAsNumber;
 				} else if(!isNaN(this.maxAsNumber) && start > this.maxAsNumber){
@@ -3505,7 +3579,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			},
 			reorderInputs: function(){
 				if(splitInputs[this.type]){
-					var element = this.element;
+					var element = this.element.attr('dir', curCfg.date.isRTL ? 'rtl' : 'ltr');
 					splitInputs[this.type].sort(element, this.options);
 					setTimeout(function(){
 						var data = webshims.data(element);
@@ -3531,6 +3605,13 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					this.elemHelper.prop('value', val);
 					this.options.defValue = "";
 				}
+			},
+			toFixed: function(val, force){
+				var o = this.options;
+				if(o.toFixed && o.type == 'number' && val && this.valueAsNumber && (force || !this.element.is(':focus')) && (!o.fixOnlyFloat || (this.valueAsNumber % 1)) && !$(this.orig).is(':invalid')){
+					val = formatVal[this.type](this.valueAsNumber.toFixed(o.toFixed), this.options);
+				}
+				return val;
 			}
 		});
 		
@@ -3543,7 +3624,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					} else {
 						this.elemHelper.prop(name, val);
 					}
-					
+
 					val = formatVal[this.type](val, this.options);
 					if(this.options.splitInput){
 						$.each(this.splits, function(i, elem){
@@ -3555,7 +3636,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 							}
 						});
 					} else {
-						this.element.prop(name, val);
+						this.element.prop(name, this.toFixed(val));
 					}
 					this._propertyChange(name);
 					this.mirrorValidity();
@@ -3572,6 +3653,9 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					this._setStartInRange();
 				}
 				this.options[name] = val;
+				if(this._init){
+					createYearSelect({elements: this.inputElements}, this.options);
+				}
 				this._propertyChange(name);
 				this.mirrorValidity();
 			};
@@ -3592,7 +3676,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 		
 		$.fn.spinbtnUI = function(opts){
 			opts = $.extend({
-				monthNames: 'monthNames'
+				monthNames: 'monthNamesShort'
 			}, opts);
 			return this.each(function(){
 				$.webshims.objectCreate(spinBtnProto, {
@@ -3622,6 +3706,53 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			isVisible: true
 		};
 		
+		picker.isInRange = function(value, max, min){
+			return !((min[0] && min[0] > value[0]) || (max[0] && max[0] < value[0]));
+		};
+		
+		
+		picker.createYearSelect = function(value, max, min, valueAdd, stepper){
+			if(!stepper){
+				stepper = {start: value, step: 1, label: value};
+			}
+			var temp;
+			var goUp = true;
+			var goDown = true;
+			var options = ['<option selected="">'+ stepper.label + '</option>'];
+			var i = 0;
+			var createOption = function(value, add){
+				var value2, label;
+				if(stepper.step > 1){
+					value2 = value + stepper.step - 1;
+					label = value+' – '+value2;
+				} else {
+					label = value;
+				}
+				
+				if(picker.isInRange([value], max, min) || (value2 && picker.isInRange([value2], max, min))){
+					options[add]('<option value="'+ (value+valueAdd) +'">'+ label +'</option>');
+					return true;
+				}
+			};
+			if(!valueAdd){
+				valueAdd = '';
+			}
+			while(i < 18 && (goUp || goDown)){
+				i++;
+				if(goUp){
+					temp = stepper.start - (i * stepper.step);
+					goUp = createOption(temp, 'unshift');
+				}
+				if(goDown){
+					temp = stepper.start + (i * stepper.step);
+					goDown = createOption(temp, 'push');
+				}
+				
+			}
+			
+			return options;
+		};
+		
 		picker._genericSetFocus = function(element, _noFocus){
 			element = $(element || this.activeButton);
 			
@@ -3631,12 +3762,12 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 					clearTimeout(that.timer);
 					that.timer = setTimeout(function(){
 						if(element[0]){
-							element[0].focus();
+							element.trigger('focus');
 							if(noTrigger !== true && !element.is(':focus')){
 								setFocus(true);
 							}
 						}
-					}, that.popover.isVisible ? 99 : 360);
+					}, that.popover.isVisible ? 0 : 360);
 				};
 				this.popover.activateElement(element);
 				setFocus();
@@ -3849,7 +3980,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 								popover.preventBlur();
 							}
 						},
-						mousedown: function(){
+						mousedown: function(e){
 							mouseFocus = true;
 							setTimeout(resetMouseFocus, 9);
 							if(options.buttonOnly && popover.isVisible && popover.activeElement){
@@ -4007,31 +4138,41 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			var updateStyles = function(){
 				$(data.orig).removeClass('ws-important-hide');
 				$.style( data.orig, 'display', '' );
-				var hasButtons, marginR, marginL;
+				var hasButtons, marginR, marginL, left, right, isRtl;
 				var correctWidth = 0.8;
 				if(!init || data.orig.offsetWidth){
 					hasButtons = data.buttonWrapper && data.buttonWrapper.filter(isVisible).length;
-					marginR = $.css( data.orig, 'marginRight');
-					data.element.css({
-						marginLeft: $.css( data.orig, 'marginLeft'),
-						marginRight: hasButtons ? 0 : marginR
-					});
+					
+					isRtl = hasButtons && data.buttonWrapper.css('direction') == 'rtl';
+					if(isRtl){
+						left = 'Right';
+						right = 'Left';
+					} else {
+						left = 'Left';
+						right = 'Right';
+					}
+					
+					marginR = $.css( data.orig, 'margin'+right);
+					
+					data.element
+						.css('margin'+left, $.css( data.orig, 'margin'+left))
+						.css('margin'+right, hasButtons ? 0 : marginR)
+					;
 					
 					if(hasButtons){
-						marginL = (parseInt(data.buttonWrapper.css('marginLeft'), 10) || 0);
-						data.element.css({paddingRight: ''});
+						data.buttonWrapper[isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+						marginL = (parseInt(data.buttonWrapper.css('margin'+left), 10) || 0);
+						data.element.css('padding'+right, '');
 						
 						if(marginL < 0){
 							marginR = (parseInt(marginR, 10) || 0) + ((data.buttonWrapper.outerWidth() + marginL) * -1);
-							data.buttonWrapper.css('marginRight', marginR);
+							data.buttonWrapper.css('margin'+right, marginR);
 							data.element
-								.css({paddingRight: ''})
-								.css({
-									paddingRight: (parseInt( data.element.css('paddingRight'), 10) || 0) + data.buttonWrapper.outerWidth()
-								})
+								.css('padding'+right, '')
+								.css('padding'+right, (parseInt( data.element.css('padding'+right), 10) || 0) + data.buttonWrapper.outerWidth())
 							;
 						} else {
-							data.buttonWrapper.css('marginRight', marginR);
+							data.buttonWrapper.css('margin'+right, marginR);
 							correctWidth = data.buttonWrapper.outerWidth(true) + correctWidth;
 						}
 					}
@@ -4049,7 +4190,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			
 			var type = $.prop(this, 'type');
 			
-			var i, opts, data, optsName, labels;
+			var i, opts, data, optsName, labels, cNames;
 			if(inputTypes[type] && webshims.implement(this, 'inputwidgets')){
 				data = {};
 				optsName = type;
@@ -4087,17 +4228,38 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 						opts[optsName] = $.attr(this, copyAttrs[i]) || opts[optsName];
 					}
 				}
-				
-				if(opts.onlyMonthDigits || (!opts.formatMonthNames && opts.monthSelect)){
-					opts.formatMonthNames = 'monthDigits';
+				if(opts.formatMonthNames){
+					webshims.error('formatMonthNames was renamded to monthNames');
+				}
+				if(opts.onlyMonthDigits){
+					opts.monthNames = 'monthDigits';
 				}
 				data.shim = inputTypes[type]._create(opts);
-				
+
 				webshims.addShadowDom(this, data.shim.element, {
 					data: data.shim || {}
 				});
 				
 				data.shim.options.containerElements.push(data.shim.element[0]);
+				cNames = $.prop(this, 'className');
+				if(opts.classes){
+					cNames += ' '+opts.classes;
+				}
+				
+				if(opts.splitInput || type == 'range'){
+					cNames = cNames.replace('form-control', '');
+				}
+				
+				data.shim.element.on('change input', stopPropagation).addClass(cNames);
+				
+				if(data.shim.buttonWrapper){
+					
+					data.shim.buttonWrapper.addClass('input-button-size-'+(data.shim.buttonWrapper.children().filter(isVisible).length));
+					
+					if(data.shim.buttonWrapper.filter(isVisible).length){
+						data.shim.element.addClass('has-input-buttons');
+					}
+				}
 				
 				labelWidth($(this).getShadowFocusElement(), labels);
 				
@@ -4129,14 +4291,13 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 										$(opts.orig).trigger(hasFocus ? 'focusin' : 'focusout');
 									}
 									hasFocusTriggered = hasFocus;
-								}, 0);
+								}, 9);
 							}
 						})
 					;
 				})();
-								
 				
-				data.shim.element.on('change input', stopPropagation);
+				
 				
 				if(hasFormValidation){
 					$(opts.orig).on('firstinvalid', function(e){
@@ -4151,13 +4312,6 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 						});
 					});
 				}
-				
-				
-				if(data.shim.buttonWrapper && data.shim.buttonWrapper.filter(isVisible).length){
-					data.shim.element.addClass('has-input-buttons');
-				}
-				
-				data.shim.element.addClass($.prop(this, 'className'));
 				
 				if(opts.calculateWidth){
 					sizeInput(data.shim);
@@ -4220,7 +4374,7 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 			if(!modernizrInputTypes[name] || replace[name]){
 				extendType(name, {
 					_create: function(opts, set){
-						if(opts.monthSelect || opts.daySelect){
+						if(opts.monthSelect || opts.daySelect || opts.yearSelect){
 							opts.splitInput = true;
 						}
 						if(opts.splitInput && !splitInputs[name]){
@@ -4239,7 +4393,6 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 						if(webshims.picker && webshims.picker[name]){
 							webshims.picker[name](data);
 						}
-						data.buttonWrapper.addClass('input-button-size-'+(data.buttonWrapper.children().filter(isVisible).length));
 						return data;
 					}
 				});

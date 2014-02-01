@@ -1,4 +1,5 @@
 @import "_extends.scss";
+@import "_api-shim.scss";
 
 .ws-important-hide {
 	display: none !important;
@@ -7,7 +8,7 @@
 	top: -999999px;
 }
 
-
+[hidden]{display: none;}
 article, aside, canvas, details, figcaption, figure, footer, header, hgroup, main, nav, section, summary {
 	display: block;
 }
@@ -210,6 +211,8 @@ output {
  * popovers
  */
 .ws-popover {
+	@extend %contentbox;
+	
 	font-size: 13px;
 	display: block;
 	visibility: hidden;
@@ -222,16 +225,20 @@ output {
 	margin: 0 0 0 em(-12);
 	z-index: 1100;
 	min-width: em(50);
-	-webkit-transform: translate3d(0px, 0px, 0px);
-	-webkit-backface-visibility: hidden;
 	-webkit-transform-style: preserve-3d;
-	transform: translate3d(0px, 0px, 0px);
 	transform-style: preserve-3d;
+	-webkit-transform: translate3d(0px, 0px, 0px);
+	transform: translate3d(0px, 0px, 0px);
+	-webkit-backface-visibility: hidden;
 	backface-visibility: hidden;
 	transition: visibility 400ms ease-in-out;
-	-moz-box-sizing: content-box;
-	box-sizing: content-box;
 	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	direction: ltr;
+	
+	&.ws-is-rtl {
+		direction: rtl;
+		margin: 0 0 0 em(12);
+	}
 	
 	&.no-transition	{
 		display: none;
@@ -251,8 +258,9 @@ output {
 	transform: translate(0, -100%);
 	transition: all 400ms ease-in-out;
 	
+	
 	[data-vertical="bottom"] & {
-	  -webkit-transform: translate(0, 100%);
+		-webkit-transform: translate(0, 100%);
 		transform: translate(0, 100%);
 		padding: em(4) 0 em(11);
 	}
@@ -275,7 +283,7 @@ output {
 	border: em(1) solid #ccc;
 	background: #fff;
 	padding: em(5) em(5) em(3);
-	border-radius: 3px;
+	border-radius: em(3);
 	box-shadow: 0 em(1) em(5) rgba(0, 0, 0, 0.25);
 	
 	
@@ -286,11 +294,8 @@ output {
 		margin: 0;
 		border: 0;
 		padding: 0;
-		-moz-box-sizing: content-box;
-		box-sizing: content-box;
 		-webkit-appearance: none;
 		appearance: none;
-		box-sizing: content-box;
 		font-family: inherit;
 		background: transparent;
 		cursor: pointer;
@@ -320,6 +325,12 @@ output {
 	border-top: none;
 	zoom: 1;
 	
+	.ws-is-rtl & {
+		left: auto;
+		right: em(20);
+	}
+	
+	
 	[data-horizontal="center"] & {
 		left: 50%;
 		margin-left: em(-4);
@@ -346,16 +357,17 @@ output {
 			border-right-color: transparent;
 		}
 	}
+	
+	
 
-	[data-vertical="middle"] &,
-	* html & {
+	[data-vertical="middle"] & {
 		display: none;
 	}
 
 	.ws-po-arrowbox {
 		position: relative;
 		top: em(1);
-		left: em(-6.7);
+		left: em(-7);
 		display: block;
 		width: 0;
 		height: 0;
@@ -364,6 +376,12 @@ output {
 		border-bottom: em(7) solid #fefefe;
 		border-top: none;
 		z-index: 999999999;
+		
+		
+		.ws-is-rtl & {
+			left: auto;
+			right: em(-7);
+		}
 		
 		[data-vertical="bottom"] & {
 			top: em(-8);
@@ -376,6 +394,10 @@ output {
 
 //data list
 datalist {
+	display: none;
+}
+
+input[data-wslist]::-webkit-calendar-picker-indicator {
 	display: none;
 }
 
@@ -393,85 +415,98 @@ datalist {
 		overflow-x: hidden !important;
 		overflow-y: auto;
 
-  	ul, li {
-  		font-size: 100%;
-  		list-style: none !important;
-  	}
-  
-  	ul {
-  		position: static !important;
-  		overflow: hidden;
-  		margin: 0;
-  		padding: em(1) 0;
-  		height: auto !important;
-  		background-color: #fff;
-  		color: #000;
-  	}
-  
-  	li {
-  		margin: em(1) 0;
-  		padding: em(2) em(10);
-  		overflow: hidden;
-  		white-space: nowrap;
-  		cursor: default;
-  		zoom: 1;
-  		overflow: hidden;
-  		text-overflow: ellipsis;
-  		background-color: #fff;
-  		transition: background-color 400ms;
-  	}
-  
-  	mark {
-  		font-weight: normal;
-  		font-style: normal;
-  	}
-  
-  	.option-value {
-  		display: inline-block;
-  		text-overflow: ellipsis;
-  		max-width: 100%;
-  		color: #000;
-  		float: left;
-  		transition: color 400ms;
-  	}
-  	
-  	.option-label {
-  		display: none;
-  		max-width: 100%;
-  		float: right;
-  		font-size: 90%;
-  		color: #666;
-  		text-overflow: ellipsis;
-  		vertical-align: bottom;
-  		margin-top: 0.15em;
-  		margin-left: em(10);
-  		text-align: right;
-  		transition: color 400ms;
-  	}
-  	
-  	.has-option-label  {
-  		.option-label {
-  			display: inline-block;
-  		}
-  	}
-  
-  
-  	.hidden-item {
-  		display: none !important;
-  	}
-  
-  	.active-item {
-  		background-color: #39f;
-  		.option-value {
-  			color: #fff;
-  		}
-  		.option-label {
-  			color: #eee;
-  		}
-  		cursor: default;
-  	}
+		ul, li {
+			font-size: 100%;
+			list-style: none !important;
+		}
+		
+		ul {
+			position: static !important;
+			overflow: hidden;
+			margin: 0;
+			padding: em(1) 0;
+			height: auto !important;
+			background-color: #fff;
+			color: #000;
+		}
+		
+		li {
+			margin: em(1) 0;
+			padding: em(2) em(10);
+			overflow: hidden;
+			white-space: nowrap;
+			cursor: default;
+			zoom: 1;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			background-color: #fff;
+			transition: background-color 400ms;
+		}
+		
+		mark {
+			font-weight: normal;
+			font-style: normal;
+		}
+
+		.option-value {
+			display: inline-block;
+			text-overflow: ellipsis;
+			max-width: 100%;
+			color: #000;
+			float: left;
+			transition: color 400ms;
+		}
+		
+		.option-label {
+			display: none;
+			max-width: 100%;
+			float: right;
+			font-size: 90%;
+			color: #666;
+			text-overflow: ellipsis;
+			vertical-align: bottom;
+			margin-top: 0.15em;
+			margin-left: em(10);
+			text-align: right;
+			transition: color 400ms;
+		}
+		
+		.has-option-label  {
+			.option-label {
+				display: inline-block;
+			}
+		}
 	
-  }
+		.hidden-item {
+			display: none !important;
+		}
+	
+		.active-item {
+			cursor: default;
+			background-color: #39f;
+			
+			.option-value {
+				color: #fff;
+			}
+			.option-label {
+				color: #eee;
+			}
+		}
+	}
+	
+	&.ws-is-rtl {
+		
+		.option-value {
+			float: right;
+		}
+		
+		.option-label {
+			float: left;
+			margin-right: em(10);
+			margin-left: 0;
+			text-align: left;
+		}
+	}
 }
 
 
@@ -492,92 +527,59 @@ datalist {
 	p {
 		margin: 2px 0 3px;
 		padding: 0;
-		color: #933;
-		font: 90%/120% sans-serif;
+		color: #a94442;
 	}
 }
 
-@mixin progressbar {
-	border: 1px solid #ddd;
-	background: #f0f0f0;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) inset;
-	border-radius: 4px;
-}
-
-@mixin progressvalue {
-	position: absolute;
-	display: block !important;
-	top: 0;
-	left: 0;
-	bottom: 0;
-	height: 100%;
-	box-shadow: 0 -1px 1px rgba(0, 0, 0, 0.15) inset;
-	background: #0063a6 url(progress.gif);
-	border: 0;
-}
 
 progress {
 	position: relative;
 	display: inline-block;
-	width: 160px;
-	height: 16px;
+	width: 164px;
+	height: 20px;
 	overflow: hidden;
+	-moz-box-sizing: border-box;
+	box-sizing: border-box;
+	vertical-align: -0.2em;
 	
-	&[data-position] {
-		@include progressbar;
-		vertical-align: -0.2em;
-	}
-
 	> * {
 		display: none !important;
 	}
-
-	span.progress-value {
-		@include progressvalue;
-	}
 	
-	&[aria-valuenow] span.progress-value {
-		background-image: url(progress.png);
-	}
+	&[data-position],
+	&.ws-style {
 	
-	.ws-replaceui & {
-		-webkit-appearance: none;
-		-moz-appearance: none;
-		appearance: none;
-		
-		@include progressbar;
-		
-		&::-webkit-progress-bar { 
-			@include progressbar;
-			border: 0 none;
-		}
-		&::-webkit-progress-value { 
-			@include progressvalue;
-			background-image: url(progress.png);
-		}
-		&:indeterminate::-webkit-progress-bar { 
-			background-image: url(progress.gif);
+		@include progress {
+			border: 1px solid #ddd;
+			background: #f0f0f0;
+			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) inset;
+			border-radius: 4px;
 		}
 		
-		&::-moz-progress-bar { 
-			@include progressvalue;
-			background-image: url(progress.png);
+		> span.progress-value {
+			left: 0;
 		}
-		&:indeterminate::-moz-progress-bar {
+		
+		&.ws-is-rtl > span.progress-value {
+			left: auto;
+			right: 0;
+		}
+		
+		@include progressbar {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			height: 100%;
+			box-shadow: 0 -1px 1px rgba(0, 0, 0, 0.15) inset;
+			background: #0063a6 url(progress.png);
+			border: 0;
+		}
+		
+		@include indeterminate-progressbar {
 			background-image: url(progress.gif);
-		}
-		/*ms styles*/
-		&:indeterminate {
-			background-image: url(progress.gif);
-		}
-		&::-ms-fill {
-			@include progressvalue;
-			background-image: url(progress.png);
-			animation-name: none;
 		}
 	}
 }
-
 
 
 details {
@@ -593,13 +595,20 @@ summary {
 .details-open-indicator {
 	margin: -1px 0 0;
 	display: inline-block;
-	width: 16px;
-	height: 11px;
-	background: url(details-arrows.png) no-repeat 0 0;
+	
+	margin-right: 0.4em;
+	width: 0px;
+	height: 0px;
+	border-style: solid;
+	border-width: em(10) em(5) 0 em(5);
+	border-color: #000 transparent transparent transparent;
+	
+	
 	vertical-align: middle;
 
 	.closed-details-summary & {
-		background-position: 0 -20px;
+		border-width: em(5) 0 em(5) em(10);
+		border-color: transparent transparent transparent #000;
 	}
 }
 

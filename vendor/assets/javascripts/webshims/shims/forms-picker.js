@@ -513,7 +513,9 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 						var elem = this;
 						setTimeout(function(){
 							elem.focus();
-							elem.select();
+							if(elem.select){
+								elem.select();
+							}
 						}, 4);
 						
 						stopTab();
@@ -526,8 +528,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 									try {
 										$(this).next().next('input, select').each(select);
 									} 
-									catch (er) {
-									}
+									catch (er) {}
 								}
 							}
 							else 
@@ -586,8 +587,12 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 								mouseDownInit();
 							}
 							var ret = false;
+
 							if (!factor) {
 								factor = 1;
+							}
+							if(o.stepfactor){
+								factor *= o.stepfactor;
 							}
 							try {
 								that.elemHelper[name](factor);
@@ -602,6 +607,9 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 							}
 							if (ret !== false && o.value != ret) {
 								that.value(ret);
+								if(o.toFixed && o.type == 'number'){
+									that.element[0].value = that.toFixed(that.element[0].value, true);
+								}
 								eventTimer.call('input', ret);
 							}
 							return ret;
@@ -928,7 +936,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		if(data.options.useDecadeBase == 'max' && max[0]){
 			xthCorrect = 11 - (max[0] % 12);
 		} else if(data.options.useDecadeBase == 'min' && min[0]){
-			xthCorrect = 11 - (min[0] % 12);
+			xthCorrect = 0 - (min[0] % 12);
 		}
 		
 		value = value[0] * 1;
@@ -989,11 +997,11 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 	
 	picker.getMonthList = function(value, data){
 		
-		var j, i, name, val, disabled, lis, fullyDisabled, prevDisabled, nextDisabled, classStr, classArray;
+		var j, i, name, val, disabled, lis, prevDisabled, nextDisabled, classStr, classArray;
 		var o = data.options;
 		var size = o.size;
-		var max = o.max.split('-');
-		var min = o.min.split('-');
+		var max = o.maxS;
+		var min = o.minS;
 		var cols = o.cols || 4;
 		var currentValue = o.value.split('-');
 		var enabled = 0;
@@ -1015,9 +1023,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			
 			if( !picker.isInRange([value, '01'], max, min) && !picker.isInRange([value, '12'], max, min)){
 				disabled = ' disabled=""';
-				fullyDisabled = true;
 			} else {
-				fullyDisabled = false;
 				disabled = '';
 			}
 			
@@ -1034,7 +1040,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				val = curCfg.date.monthkeys[i+1];
 				name = getMonthNameHTML(i);
 				classArray = [];
-				if(fullyDisabled || !picker.isInRange([value, val], max, min) ){
+				if(!picker.isInRange([value, val], max, min) ){
 					disabled = ' disabled=""';
 				} else {
 					disabled = '';
@@ -1343,47 +1349,6 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		}
 		return options;
 	};
-	
-	picker.createYearSelect = function(value, max, min, valueAdd, stepper){
-		if(!stepper){
-			stepper = {start: value, step: 1, label: value};
-		}
-		var temp;
-		var goUp = true;
-		var goDown = true;
-		var options = ['<option selected="">'+ stepper.label + '</option>'];
-		var i = 0;
-		var createOption = function(value, add){
-			var value2, label;
-			if(stepper.step > 1){
-				value2 = value + stepper.step - 1;
-				label = value+' – '+value2;
-			} else {
-				label = value;
-			}
-			
-			if(picker.isInRange([value], max, min) || (value2 && picker.isInRange([value2], max, min))){
-				options[add]('<option value="'+ (value+valueAdd) +'">'+ label +'</option>');
-				return true;
-			}
-		};
-		if(!valueAdd){
-			valueAdd = '';
-		}
-		while(i < 18 && (goUp || goDown)){
-			i++;
-			if(goUp){
-				temp = stepper.start - (i * stepper.step);
-				goUp = createOption(temp, 'unshift');
-			}
-			if(goDown){
-				temp = stepper.start + (i * stepper.step);
-				goDown = createOption(temp, 'push');
-			}
-			
-		}
-		return options;
-	};
 		
 	(function(){
 		var retNames = function(name){
@@ -1401,16 +1366,18 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		};
 		var setDirButtons = function(content, popover, dir){
 			if(content[dir]){
-					popover[dir+'Element']
-						.attr(content[dir])
-						.prop({disabled: false})
-					;
-				} else {
-					popover[dir+'Element']
-						.removeAttr('data-action')
-						.prop({disabled: true})
-					;
-				}
+				//set content and idl attribute (content for css + idl for IE8-) 
+				popover[dir+'Element']
+					.attr(content[dir])
+					.prop({disabled: false})
+					.prop(content[dir])
+				;
+			} else {
+				popover[dir+'Element']
+					.removeAttr('data-action')
+					.prop({disabled: true})
+				;
+			}
 		};
 		
 		$.each({'setYearList' : ['Year', 'Month', 'Day', 'Time'], 'setMonthList': ['Month', 'Day', 'Time'], 'setDayList': ['Day', 'Time'], 'setTimeList': ['Time']}, function(setName, names){
@@ -1427,7 +1394,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 					if(i >= startAt){
 						var content = picker[item](values, data);
 						
-						if( values.length < 2 || content.enabled > 1 || stops[data.type] === names[i]){
+						if( values.length < 2 || content.enabled > 1 || content.prev || content.next || stops[data.type] === names[i]){
 							popover.element
 								.attr({'data-currentview': setNames[i]})
 								.addClass('ws-size-'+o.size)
@@ -1580,8 +1547,11 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				popover.yearPrevElement
 					.attr({'aria-label': curCfg.date.prevText})
 				;
-				
-				
+				popover.contentElement.attr({
+					dir: curCfg.date.isRTL ? 'rtl' : 'ltr',
+					lang: webshims.formcfg.__activeName
+				});
+
 				generateList(o, o.maxS, o.minS);
 				
 				if(popover.isVisible){
@@ -1592,7 +1562,6 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			$('button.ws-empty', popover.buttonRow).prop('disabled', $.prop(data.orig, 'required'));
 			popover.isDirty = false;
 		};
-		
 		
 		if(data.type == 'time'){
 			o.minView = 3;
@@ -1620,7 +1589,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		
 		
 		
-		popover.contentElement.html('<div class="prev-controls ws-picker-controls"><button class="ws-super-prev ws-year-btn" tabindex="0"></button><button class="ws-prev" tabindex="0"></button></div> <div class="next-controls ws-picker-controls"><button class="ws-next" tabindex="0"></button><button class="ws-super-next ws-year-btn" tabindex="0"></button></div><div class="ws-picker-body"></div><div class="ws-button-row"><button type="button" class="ws-current" data-action="changeInput" value="'+today[data.type]+'" tabindex="0"></button> <button type="button" data-action="changeInput" value="" class="ws-empty" tabindex="0"></button></div>');
+		popover.contentElement.html('<div class="prev-controls ws-picker-controls"><button class="ws-super-prev ws-year-btn" tabindex="0" type="button"></button><button class="ws-prev" tabindex="0" type="button"></button></div> <div class="next-controls ws-picker-controls"><button class="ws-next" tabindex="0" type="button"></button><button class="ws-super-next ws-year-btn" tabindex="0" type="button"></button></div><div class="ws-picker-body"></div><div class="ws-button-row"><button type="button" class="ws-current" data-action="changeInput" value="'+today[data.type]+'" tabindex="0"></button> <button type="button" data-action="changeInput" value="" class="ws-empty" tabindex="0"></button></div>');
 		popover.nextElement = $('button.ws-next', popover.contentElement);
 		popover.prevElement = $('button.ws-prev', popover.contentElement);
 		popover.yearNextElement = $('button.ws-super-next', popover.contentElement);
@@ -1642,9 +1611,12 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			}
 		});
 		$(document).onTrigger('wslocalechange', data._propertyChange);
-		
-		if(o.inlinePicker){
+		if(o.updateOnInput == null && (o.inlinePicker || o.noChangeDismiss)){
 			o.updateOnInput = true;
+		}
+		if(o.inlinePicker){
+			popover.element.attr('data-class', $.prop(data.orig, 'className'));
+			popover.element.attr('data-id', $.prop(data.orig, 'id'));
 		}
 		
 		$(o.orig).trigger('pickercreated');

@@ -1,10 +1,20 @@
 @import "_extends.scss";
+@import "_api-forms-ext.scss";
 
 /* spinner control for time, number (usable for date, datetime-local) */
 .has-input-buttons,
 html > body input.ws-inputreplace.has-input-buttons,
 span.has-input-buttons {
 	display: inline-block;
+	vertical-align: middle;
+}
+
+.ws-inputreplace[readonly][aria-readonly="false"] {
+	cursor: pointer;
+	&[disabled] {
+		cursor: default;
+		cursor: not-allowed;
+	}
 }
 
 .input-buttons,
@@ -13,9 +23,7 @@ span.has-input-buttons {
 	zoom: 1;
 	overflow: hidden;
 	display: inline-block;
-	font-size: 0;
 	vertical-align: middle;
-	margin-top: -3px;
 	margin-left: -20px;
 }
 
@@ -26,6 +34,10 @@ span.has-input-buttons {
 	margin: 0;
 	height: 19px;
 	width: 15px;
+	
+	.ws-is-rtl & {
+		float: right;
+	}
 }
 
 .ws-popover-opener {
@@ -37,6 +49,11 @@ span.has-input-buttons {
 	border-radius: 3px;
 	cursor: pointer;
 	background: #ccc;
+	
+	
+	.ws-is-rtl & {
+		margin: 0 2px 0 0;
+	}
 	
 	span {
 		display: block;
@@ -67,7 +84,7 @@ span.has-input-buttons {
 }
 
 input[type="color"] {
-	width: 6.5em;
+	width: 7.5em;
 }
 
 .input-buttons {
@@ -76,15 +93,7 @@ input[type="color"] {
 	&.color-input-buttons {
 		margin-left: 2px;
 	}
-	&.input-button-size-1 {
-		&.month-input-buttons,
-		&.date-input-buttons {
-			margin-left: -24px;
-		}
-	}
-	&.input-button-size-2 {
-		margin-left: -39px;
-	}
+	
 	&.ws-disabled {
 		opacity: 0.95;
 	}
@@ -94,10 +103,33 @@ input[type="color"] {
 	}
 }
 
+.input-button-size-1 {
+	&.month-input-buttons,
+	&.date-input-buttons,
+	&.datetime-local-input-buttons {
+		margin-left: -24px;
+		
+		
+		&.ws-is-rtl {
+			margin-left: 0;
+			margin-right: -24px;
+		}
+	}
+}
+.input-button-size-2 {
+	margin-left: -39px;
+	
+	&.ws-is-rtl {
+		margin-left: 0;
+		margin-right: -39px;
+	}
+}
+
 .step-controls {
 
 	span {
 		position: absolute;
+		left: 0;
 		display: inline-block;
 		overflow: hidden;
 		margin: 0 !important;
@@ -139,16 +171,27 @@ input[type="color"] {
 	}
 }
 
+/* helper classes to hide show/hide specific btn features features */
+@each $class in $btnapis {
+	.#{$class} {
+		@extend %#{$class};
+	}
+}
 
 .ws-input {
-
 	letter-spacing: -0.31em;
 	word-spacing: -0.43em;
-	
+
+
+
 	> * {
 		text-align: center;
 		letter-spacing: normal;
 		word-spacing: normal;
+		
+		> option {
+			text-align: left;
+		}
 	}
 	.ws-input-seperator {
 		vertical-align: middle;
@@ -167,8 +210,10 @@ input[type="color"] {
 		text-align: center;
 		display: inline-block;
 	}
-	
-	
+}
+
+span.ws-input {
+	display: inline-block;
 }
 
 .ws-date {
@@ -210,11 +255,10 @@ input[type="color"] {
 
 /* range */
 .ws-range {
-
 	position: relative;
 	display: inline-block;
 	vertical-align: middle;
-	margin: 5px 0 10px;
+	margin: em(7.5) 0;
 	zoom: 1;
 	border: none;
 	height: em(8);
@@ -227,14 +271,19 @@ input[type="color"] {
 	transition: background-color 400ms, border-color 400ms;
 	background-color: #ddd;
 	box-shadow: 0 em(-1) em(1.5) rgba(0, 0, 0, 0.2) inset;
-
+	
+	[list] + & {
+		margin: em(2.5) 0 em(12.5);
+	}
+	
 	.ws-range-thumb {
-		$dim: 16;
+		@extend %contentbox;
+		$dim: 20;
 		top: 0;
 		position: absolute;
 		display: block;
 		z-index: 4;
-		margin: em($dim / -2) 0 0 em($dim / -2);
+		margin: em(($dim - 8) / -2) 0 0 em($dim / -2);
 		height: em($dim);
 		width: em($dim);
 		border-radius: 50%;
@@ -243,28 +292,37 @@ input[type="color"] {
 		cursor: pointer;
 		transition: background-color 400ms, border-color 400ms;
 		
-		&:after,
-		&:before	{
+		> span {
 			position: absolute;
-			top: em(-28);
-			left: -.3em;
-			display: inline-block;
-			content: attr(data-value);
-			padding: em(3) em(1);
-			min-width: 2em;
+			margin: 0 0 3px -90px;
+			padding: 0;
+			border: 0;
+			left: 50%;
+			bottom: em($dim + 1);
 			visibility: hidden;
+			width: 180px;
 			text-align: center;
-			background: #fff;
-			border: em(1) solid #ccc;
-			transition: all 400ms;
+			background: none;
+			
+			&:after,
+			&:before {
+				content: attr(data-value);
+				padding: em(1) em(3.5);
+				text-align: center;
+				background: #fff;
+				border: em(1) solid #ccc;
+				border-radius: em(4);
+				visibility: visible;
+			}
+			
+			&:after {
+				content: attr(data-value);
+			}
+			&:before {
+				content: attr(data-valuetext);
+			}
 		}
 		
-		&:after {
-			content: attr(data-value);
-		}
-		&:before {
-			content: attr(data-valuetext);
-		}
 	}
 
 	&.ws-focus .ws-range-thumb {
@@ -320,76 +378,99 @@ input[type="color"] {
 
 	.ws-range-ticks {
 		position: absolute;
-		bottom: em(-7.5);
+		bottom: em(-10);
 		left: 0;
-		height: em(6.8);
-		width: em(1.5);
-		margin: 0 0 0 em(-2);
+		height: em(8);
+		width: em(1);
+		margin: 0 0 0 em(-1);
 		background: #ccc;
+		transition: background-color 400ms, color 400ms;
+		
+		&.ws-selected-option {
+			background: #09c;
+			color: #09c;
+		}
 	}
 	
-	.ws-range-ticks[data-label]:after {
-		visibility: hidden;
-		content: attr(data-label);
-		display: inline-block;
-		font-size: em(9);
-		min-width: 2em;
-		text-align: center;
-		margin: em(7) 0 0 -1em;
+	&.ws-is-rtl {
+		.ws-range-progress {
+			left: auto;
+			right: 0;
+		}
+		.ws-range-ticks {
+			left: auto;
+			right: 0;
+		}
 	}
-
+	
 	&.vertical-range {
-		background: url(vertical-range.png) center bottom no-repeat;
-		width: 20px;
-
-		.ws-range-thumb {
-			top: 0;
-			left: 3px;
+		width: em(8);
+		margin: 0 10px 0 5px;
+		
+		.ws-range-ticks {
 			bottom: auto;
-			background: url(vertical-range.png) 0 -51px no-repeat;
-			margin: -6px 0 0 0;
-			height: 11px;
-			width: 22px;
-
+			left: auto;
+			margin:  em(-0.75) 0 0 0;
+			right: em(-7.5);
+			height: em(1.5);
+			width: em(6.8);
 		}
-		.ws-range-thumb:hover,
-		&.ws-focus .ws-range-thumb {
-			background-position: 0 -34px;
-		}
-		&.ws-active .ws-range-thumb {
-			background-position: 0 -17px;
-		}
-
-		&[aria-disabled="true"] .ws-range-thumb {
-			background-position: 0 0;
-		}
-
+		
 		.ws-range-progress {
 			top: auto;
 			bottom: 1px;
 			left: 0;
-			width: 1px;
+			width: 100%;
 			height: 0;
 		}
+		
+	}
+}
 
-		.ws-range-rail {
-			top: 5px;
-			left: 0;
-			right: 0;
-			bottom: 5px;
-		}
 
-		.ws-range-ticks {
-			bottom: auto;
-			left: auto;
-			right: 0;
-			height: 1px;
-			width: 4px;
+.ws-range-ticks[data-label]:after,
+.ws-range-ticks:before {
+	display: none;
+	content: attr(data-label);
+	font-size: em(10);
+	min-width: 2em;
+	text-align: center;
+	margin: em(9) 0 0 -0.95em;
+	
+	.ws-is-rtl & {
+		margin: em(9) -0.95em 0 0;
+	}
+	
+	.vertical-range & {
+		margin: 0 0 0 5px;
+		position: relative;
+		top: -0.7em;
+		left: em(7);
+		min-width: 0;
+	}
+}
+
+.ws-range-ticks:before {
+	content: attr(data-value);
+}
+
+.ws-range-thumb {
+	> span {
+		&,
+		&:after,
+		&:before {
+			display: none;
 		}
 	}
 }
 
 
+/* helper classes to hide show/hide specific range features features */
+@each $class in $rangeapis {
+	.#{$class} {
+		@extend %#{$class};
+	}
+}
 
 
 //date popover
@@ -402,24 +483,29 @@ $button-bgcolor: #f5f5f5;
 	display: inline-block;
 	border: em(1) solid transparent;
 }
+.ws-inline-picker {
+	@extend %contentbox;
+	position: relative;
+	z-index: 99;
+}
 .input-picker {
 	overflow: visible;
 	font-size: 13px;
 	outline: none;
 	text-align: center;
 	font-family: sans-serif;
-	width: em(330);
-	max-width: 100%;
+	width: em(360);
 	min-width: em(300);
 	
 	.ws-po-outerbox {
 		-webkit-transform: translate(0, 30%);
 		transform: translate(0, 30%);
 		
-		[data-vertical="bottom"] & {
-			-webkit-transform: translate(0, -3%);
-			transform: translate(0, -30%);
-		}
+		
+	}
+	&[data-vertical="bottom"] .ws-po-outerbox {
+		-webkit-transform: translate(0, -30%);
+		transform: translate(0, -30%);
 	}
 	
 	&.time-popover,
@@ -435,7 +521,6 @@ $button-bgcolor: #f5f5f5;
 			display: none;
 		}
 	}
-
 	
 	&.ws-size-2 {
 		width: em(645);
@@ -469,16 +554,17 @@ $button-bgcolor: #f5f5f5;
 
 	.ws-po-box {
 		position: relative;
-		padding: em(10) em(20) em(15);
-		border-radius: 5px;
+		padding: em(15) em(20);
+		border-radius: em(5);
 		box-shadow: 0 0 2px rgba(0, 0, 0, .3);
+		direction: ltr;
 	}
 	
 	.ws-picker-controls {
 		position: absolute;
-		top: em(10);
+		top: em(15);
 		
-		> button{
+		> button {
 			border: em(1) solid #ccc;
 			border-radius: em(5);
 			padding: 0;
@@ -495,6 +581,7 @@ $button-bgcolor: #f5f5f5;
 				width: 0px;
 				height: 0px;
 				border-style: solid;
+				margin-top: em(3.8);
 			}
 			
 			span {
@@ -514,18 +601,21 @@ $button-bgcolor: #f5f5f5;
 		}
 	}
 	
-	.prev-controls {
+	.prev-controls,
+	.ws-po-box[dir="rtl"] .next-controls {
 		left: em(20);
+		right: auto;
 		
-		.ws-super-prev:after,
-		.ws-super-prev:before,
-		.ws-prev:before {
+		[class*="ws-super-"]:after,
+		button:before {
 			border-width: 0.35em 0.6em 0.35em 0;
 			border-color: transparent #333 transparent transparent;
 			margin-left: -0.1em;
 		}
-		.ws-super-prev {
+		
+		[class*="ws-super-"] {
 			margin-right: em(3);
+			margin-left: 0;
 
 			&[disabled] {
 				display: none;
@@ -534,28 +624,36 @@ $button-bgcolor: #f5f5f5;
 		
 	}
 	
-	.next-controls {
+	.next-controls,
+	.ws-po-box[dir="rtl"] .prev-controls {
 		right: em(20);
+		left: auto;
 		
 		button:before {
 			margin-left: em(1.5);
 		}
 		
-		.ws-super-next:before,
-		.ws-super-next:after,
-		.ws-next:before {
+		
+		[class*="ws-super-"]:after,
+		button:before {
 			border-width: 0.35em 0 0.35em 0.6em;
 			border-color: transparent transparent transparent #333;
 			margin-right: -0.1em;
 		}
 		
-		.ws-super-next {
+		[class*="ws-super-"] {
 			margin-left: em(3);
+			margin-right: 0;
 
 			&[disabled]	{
 				display: none;
 			}
 		}
+	}
+	
+	.ws-po-box[dir="rtl"] {
+		direction: rtl;
+		
 	}
 
 	&.time-popover .ws-picker-body {
@@ -598,6 +696,14 @@ $button-bgcolor: #f5f5f5;
 		}
 	}
 	
+	.ws-po-box[dir="rtl"] .ws-button-row button {
+		float: right;
+		
+		&.ws-empty {
+			float: left;
+		}
+	}
+	
 	
 	&[data-currentview="setMonthList"] .ws-picker-header > select,
 	&[data-currentview="setYearList"] .ws-picker-header > select{
@@ -626,7 +732,7 @@ $button-bgcolor: #f5f5f5;
 		top: em(-40);
 		right: 0;
 		left: 0;
-		margin: 0 em(55);
+		margin: 0 em(35);
 
 		> button {
 			display: inline-block;
@@ -756,6 +862,7 @@ $button-bgcolor: #f5f5f5;
 			margin: 0;
 			border: 0 none;
 			border-collapse: collapse;
+			table-layout: fixed;
 		}
 
 		th,
@@ -824,16 +931,23 @@ $button-bgcolor: #f5f5f5;
 	/* Selector API: */
 	.ws-week,
 	.ws-year-btn {
-    display: none;
-  }
+		display: none;
+	}
 }
 .ws-picker-controls > button {
-  display: inline-block;
+	display: inline-block;
 }
 .ws-picker-header > button:after {
   display: none;
 }
 
 .ws-picker-header select {
-  display: none;
+	display: none;
+}
+/* helper classes to hide show/hide specific picker features */
+@each $class in $pickerapis {
+	.input-picker[data-class~="#{$class}"],
+	.#{$class} .input-picker {
+		@extend %#{$class};
+	}
 }

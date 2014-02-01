@@ -2,7 +2,8 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	"use strict";
 	
 	var isWebkit = 'webkitURL' in window;
-	var chromeBugs = isWebkit && Modernizr.formvalidation && !webshims.bugs.bustedValidity;
+	var hasNative = Modernizr.formvalidation && !webshims.bugs.bustedValidity;
+	var chromeBugs = isWebkit && hasNative;
 	var webkitVersion = chromeBugs && parseFloat((navigator.userAgent.match(/Safari\/([\d\.]+)/) || ['', '999999'])[1], 10);
 	
 	var iVal = options.iVal;
@@ -215,25 +216,42 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	setRoot();
 	webshims.ready('DOM', setRoot);
 	
-	
+	var rtlReg = /right|left/g;
+	var rtlReplace = function(ret){
+		return ret == 'left' ? 'right' : 'left';
+	};
 	webshims.getRelOffset = function(posElem, relElem, opts){
 		var offset, bodyOffset, dirs;
 		posElem = $(posElem);
-		$.swap($(posElem)[0], resetPos, function(){
+		$.swap(posElem[0], resetPos, function(){
+			var isRtl;
 			if($.position && opts && $.position.getScrollInfo){
 				if(!opts.of){
 					opts.of = relElem;
 				}
 				
+				isRtl = $(opts.of).css('direction') == 'rtl';
+				if(!opts.isRtl){
+					opts.isRtl = false;
+				}
+				if(opts.isRtl != isRtl){
+					opts.my = (opts.my || 'center').replace(rtlReg, rtlReplace);
+					opts.at = (opts.at || 'center').replace(rtlReg, rtlReplace);
+					opts.isRtl = isRtl;
+				}
+				
+				posElem[opts.isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+				
 				opts.using = function(calced, data){
 					posElem.attr({'data-horizontal': data.horizontal, 'data-vertical': data.vertical});
 					offset = calced;
 				};
+				
 				posElem.attr({
 					'data-horizontal': '', 
 					'data-vertical': '',
-					'data-my': opts.my || 'center',
-					'data-at': opts.at || 'center'
+					'data-my': opts.my,
+					'data-at': opts.at
 				});
 				posElem.position(opts);
 				
@@ -463,6 +481,9 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					try {
 						focusElem[0].focus();
 					} catch(e){}
+					if(!focusElem[0].offsetWidth && !focusElem[0].offsetHeight){
+						webshims.warn('invalid element seems to be hidden. Make element either visible or use disabled/readonly to bar elements from validation. With fieldset[disabled] a group of elements can be ignored.');
+					}
 					api.element.triggerHandler('pospopover');
 				};
 				
@@ -546,6 +567,16 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			return fieldWrapper;
 		},
 		_createContentMessage: (function(){
+			var noValidate = function(){
+				return !noValidate.types[this.type];
+			};
+			noValidate.types = {
+				hidden: 1,
+				image: 1,
+				button: 1,
+				reset: 1,
+				submit: 1
+			};
 			var fields = {};
 			var deCamelCase = function(c){
 				return '-'+(c).toLowerCase();
@@ -566,26 +597,36 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				var cName = name.replace(/[A-Z]/, deCamelCase);
 				fields[name] = '.'+cName+', .'+name+', .'+(name).toLowerCase()+', [data-errortype="'+ name +'"]';
 			});
-			return function(elem, errorBox){
+			return function(elem, errorBox, fieldWrapper){
 				var extended = false;
-				var errorMessages = $(elem).data('errormessage') || {};
-				if(typeof errorMessages == 'string'){
-					errorMessages = {defaultMessage: errorMessages};
-				}
+				var descriptiveMessages = {};
+
 				$(errorBox).children().each(function(){
 					var name = getErrorName(this);
-					if(!errorMessages[name]){
-						extended = true;
-						errorMessages[name] = $(this).html();
+					descriptiveMessages[name] = $(this).html();
+				});
+
+				$('input, select, textarea', fieldWrapper).filter(noValidate).each(function(i, elem){
+					var errorMessages = $(elem).data('errormessage') || {};
+					if(typeof errorMessages == 'string'){
+						errorMessages = {defaultMessage: errorMessages};
+					}
+
+					$.each(descriptiveMessages, function(name, val){
+						if(!errorMessages[name]){
+							extended = true;
+							errorMessages[name] = val;
+						}
+					});
+
+					if(extended){
+						$(elem).data('errormessage', errorMessages);
+					}
+					if(webshims.getOptions){
+						webshims.getOptions(elem, 'errormessage');
 					}
 				});
-				
-				if(extended){
-					$(elem).data('errormessage', errorMessages);
-				}
-				if(webshims.getOptions){
-					webshims.getOptions(elem, 'errormessage');
-				}
+
 			};
 		})(),
 		initIvalContentMessage: function(elem){
@@ -600,10 +641,10 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			var errorBox = fieldWrapper.data('errorbox');
 			if(!errorBox){
 				errorBox = this.create(elem, fieldWrapper);
-				this._createContentMessage(elem, errorBox);
+				this._createContentMessage(elem, errorBox, fieldWrapper);
 			} else if(typeof errorBox == 'string'){
 				errorBox = $('#'+errorBox);
-				fieldWrapper.data('errorbox', errorBox);
+				fieldWrapper.data('errorbox', errorBox, fieldWrapper);
 				this._createContentMessage(elem, errorBox);
 			}
 			return errorBox;
@@ -622,8 +663,9 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		hideError: function(elem, reset){
 			var invalid;
 			var fieldWrapper = this.getFieldWrapper(elem);
-			var errorBox = this.get(elem, fieldWrapper);
-			
+			//only if an errorbox was already created! don't use this.get here!
+			var errorBox = fieldWrapper.data('errorbox');
+
 			if(errorBox && errorBox.jquery){
 				$(elem).filter('input').off('.recheckinvalid');
 				if(!reset && (invalid = $('input:invalid, select:invalid, textarea:invalid', fieldWrapper)[0])){
@@ -726,7 +768,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			},
 			firstinvalid: function(e){
 				if(iVal.sel && iVal.handleBubble){
-				var form = $(e.target).jProp('form');
+					var form = $(e.target).jProp('form');
 					if(form.is(iVal.sel)){
 						e.preventDefault();
 						if(iVal.handleBubble != 'none'){
@@ -767,11 +809,11 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		var firstEvent,
 			invalids = [],
 			stopSubmitTimer,
-			form
+			stop
 		;
 		
 		$(document).on('invalid', function(e){
-			if(e.wrongWebkitInvalid){return;}
+			if(e.wrongWebkitInvalid || stop){return;}
 			var jElm = $(e.target);
 			
 			
@@ -793,7 +835,14 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				//reset firstinvalid
 				firstEvent = false;
 				invalids = [];
+				stop = true;
 				$(e.target).trigger(lastEvent, [lastEvent]);
+				/*
+				if(hasNative && !$.nodeName(e.target, 'form')){
+					$(e.target).jProp('form').triggerHandler('invalid');
+				}
+				*/
+				stop = false;
 			}, 9);
 			jElm = null;
 		});
@@ -936,7 +985,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			}
 		});
 	}
-	if(webshims.cfg.debug !== false){
+	if(webshims.cfg.debug !== false && iVal.sel != '.ws-instantvalidation'){
 		$(function(){
 			if($('form.ws-instantvalidation').length){
 				webshims.error('.ws-instantvalidation was renamed to .ws-validate');

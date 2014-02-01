@@ -2506,7 +2506,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 								setTimeout(trigger, 0);
 							}
 							
-						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 0);
+						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
 					};
 				})(),
 				_create: function(){
@@ -2531,7 +2531,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						setInterval(this.test, 600);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
-						$(document).on('updatelayout pageinit collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
+						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
 						$(window).on('resize', this.handler);
 						(function(){
 							var oldAnimate = $.fn.animate;
@@ -2978,10 +2978,10 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	});
 	
 	webshims.isReady('webshimLocalization', true);
-});
-//html5a11y
-(function($, document){
-	if(!$.webshims.assumeARIA || ('content' in document.createElement('template'))){return;}
+
+//html5a11y + hidden attribute
+(function(){
+	if(('content' in document.createElement('template'))){return;}
 	
 	$(function(){
 		var main = $('main').attr({role: 'main'});
@@ -2995,6 +2995,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	if(('hidden' in document.createElement('a'))){
 		return;
 	}
+	
+	webshims.defineNodeNamesBooleanProperty(['*'], 'hidden');
 	
 	var elemMappings = {
 		article: "article",
@@ -3036,7 +3038,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	});
 	
-})(webshims.$, document);;webshims.register('filereader', function( $, webshims ){
+})();
+});
+;webshims.register('filereader', function( $, webshims ){
 	"use strict";
 	/**
 	 * Code is based on https://github.com/Jahdrien/FileReader

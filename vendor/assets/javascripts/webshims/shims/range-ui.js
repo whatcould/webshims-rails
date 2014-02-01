@@ -15,8 +15,7 @@
 		_create: function(){
 			var i;
 			
-			
-			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb" /></span>');
+			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span data-value="" data-valuetext="" /></span></span>');
 			this.trail = $('.ws-range-track', this.element);
 			this.range = $('.ws-range-progress', this.element);
 			this.thumb = $('.ws-range-thumb', this.trail);
@@ -38,7 +37,7 @@
 		},
 		value: $.noop,
 		_value: function(val, _noNormalize, animate){
-			var left, posDif, textValue;
+			var left, posDif;
 			var o = this.options;
 			var oVal = val;
 			var thumbStyle = {};
@@ -54,7 +53,7 @@
 			left =  100 * ((val - o.min) / (o.max - o.min));
 			
 			if(this._init && val == o.value && oVal == val){return;}
-			this.options.value = val;
+			o.value = val;
 			
 			if($.fn.stop){
 				this.thumb.stop();
@@ -62,6 +61,7 @@
 			}
 			
 			rangeStyle[this.dirs.width] = left+'%';
+			
 			if(this.vertical){
 				left = Math.abs(left - 100);
 			}
@@ -88,15 +88,26 @@
 				this.options._change(val);
 			}
 			
-			textValue = this.options.textValue ? this.options.textValue(this.options.value) : this.options.options[this.options.value] || this.options.value;
+			this._setValueMarkup();
+		},
+		_setValueMarkup: function(){
+			var o = this.options;
+			var textValue = o.textValue ? o.textValue(this.options.value) : o.options[o.value] || o.value;
 			this.element.attr({
 				'aria-valuenow': this.options.value,
 				'aria-valuetext': textValue
 			});
-			this.thumb.attr({
+			$('span', this.thumb).attr({
 				'data-value': this.options.value,
 				'data-valuetext': textValue
 			});
+			if(o.selectedOption){
+				$(o.selectedOption).removeClass('ws-selected-option');
+				o.selectedOption = null;
+			}
+			if(o.value in o.options){
+				o.selectedOption = $('[data-value="'+o.value+'"].ws-range-ticks').addClass('ws-selected-option');
+			}
 		},
 		initDataList: function(){
 			if(this.orig){
@@ -139,9 +150,9 @@
 			$.each(o.options, function(val, label){
 				if(!isNumber(val) || val < min || val > max){return;}
 				var left = 100 * ((val - min) / (max - min));
-				var attr = '';
+				var attr = 'data-value="'+val+'"';
 				if(label){
-					attr += 'data-label="'+label+'"';
+					attr += ' data-label="'+label+'"';
 					if(o.showLabels){
 						attr += ' title="'+label+'"';
 					}
@@ -154,6 +165,9 @@
 					$('<span class="ws-range-ticks"'+ attr +' style="'+(that.dirs.left)+': '+left+'%;" />').appendTo(trail)
 				);
 			});
+			if(o.value in o.options){
+				this._setValueMarkup();
+			}
 		},
 		readonly: function(val){
 			val = !!val;
@@ -197,12 +211,13 @@
 			var step = val == 'any' ? 'any' : retDefault(val, 1);
 			
 			if(o.stepping){
-				if(step != 'any' && o.stepping % step){
-					webshims.error('wrong stepping value for type range:'+ (o.stepping % step));
-				} else {
-					step = o.stepping;
-				}
+				webshims.error('stepping was removed. Use stepfactor instead.');
 			}
+
+			if(o.stepfactor && step != 'any'){
+				step *= o.stepfactor;
+			}
+
 			o.step = step;
 			this.value(this.options.value);
 		},
@@ -240,11 +255,11 @@
 			var val, valModStep, alignValue, step;
 			
 			if(pos <= 0){
-				val = this.options[this.dirs.min];
+				val = this.options[this.dirs[this.isRtl ? 'max' : 'min']];
 			} else if(pos > 100) {
-				val = this.options[this.dirs.max];
+				val = this.options[this.dirs[this.isRtl ? 'min' : 'max']];
 			} else {
-				if(this.vertical){
+				if(this.vertical || this.isRtl){
 					pos = Math.abs(pos - 100);
 				}
 				val = ((this.options.max - this.options.min) * (pos / 100)) + this.options.min;
@@ -329,17 +344,20 @@
 					return e;
 				};
 			})();
+			var updateValue = function(val, animate){
+				if(val != o.value){
+					that.value(val, false, animate);
+					eventTimer.call('input', val);
+				}
+			};
 			var setValueFromPos = function(e, animate){
 				if(e.type == 'touchmove'){
 					e.preventDefault();
 					normalizeTouch(e);
 				}
 				
-				var val = that.getStepedValueFromPos((e[that.dirs.mouse] - leftOffset) * widgetUnits);
-				if(val != o.value){
-					that.value(val, false, animate);
-					eventTimer.call('input', val);
-				}
+				updateValue(that.getStepedValueFromPos((e[that.dirs.mouse] - leftOffset) * widgetUnits), animate);
+				
 				if(e && e.type == 'mousemove'){
 					e.preventDefault();
 				}
@@ -377,7 +395,12 @@
 					outerWidth = that.thumb[that.dirs.outerWidth]();
 					leftOffset = leftOffset[that.dirs.pos];
 					widgetUnits = 100 / widgetUnits;
-					setValueFromPos(e, o.animate);
+
+					if(e.target.className == 'ws-range-ticks'){
+						updateValue(e.target.getAttribute('data-value'), o.animate);
+					} else {
+						setValueFromPos(e, o.animate);
+					}
 					isActive = true;
 					$(document)
 						.on(e.type == 'touchstart' ?
@@ -423,6 +446,13 @@
 					var step = true;
 					var code = e.keyCode;
 					if(!o.readonly && !o.disabled){
+						if(that.isRtl){
+							if(code == 39){
+								code = 37;
+							} else if(code == 37){
+								code = 39;
+							}
+						}
 						if (code == 39 || code == 38) {
 							that.doStep(1);
 						} else if (code == 37 || code == 40) {
@@ -522,10 +552,17 @@
 				{mouse: 'pageY', pos: 'top', min: 'max', max: 'min', left: 'top', right: 'bottom', width: 'height', innerWidth: 'innerHeight', innerHeight: 'innerWidth', outerWidth: 'outerHeight', outerHeight: 'outerWidth', marginTop: 'marginLeft', marginLeft: 'marginTop'} :
 				{mouse: 'pageX', pos: 'left', min: 'min', max: 'max', left: 'left', right: 'right', width: 'width', innerWidth: 'innerWidth', innerHeight: 'innerHeight', outerWidth: 'outerWidth', outerHeight: 'outerHeight', marginTop: 'marginTop', marginLeft: 'marginLeft'}
 			;
+			if(!this.vertical && this.element.css('direction') == 'rtl'){
+				this.isRtl = true;
+				this.dirs.left = 'right';
+				this.dirs.right = 'left';
+				this.dirs.marginLeft = 'marginRight';
+			}
 			this.element
 				[this.vertical ? 'addClass' : 'removeClass']('vertical-range')
-				[this.vertical ? 'addClass' : 'removeClass']('horizontal-range')
+				[this.isRtl ? 'addClass' : 'removeClass']('ws-is-rtl')
 			;
+			this.updateMetrics = this.posCenter;
 			this.posCenter();
 		}
 	};

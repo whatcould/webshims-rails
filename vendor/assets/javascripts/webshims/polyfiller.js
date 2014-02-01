@@ -1,34 +1,29 @@
 (function (factory) {
-	var timer;
+	if (typeof WSDEBUG === 'undefined') {
+		window.WSDEBUG = true;
+	}
 	var addAsync = function(){
 		if(!window.asyncWebshims){
-			if(!window.asyncWebshims){
-				window.asyncWebshims = {
-					cfg: [],
-					ready: []
-				};
-			}
+			window.asyncWebshims = {
+				cfg: [],
+				ready: []
+			};
 		}
 	};
 	var start = function(){
 		if(window.jQuery){
 			factory(jQuery);
-			factory = jQuery.noop;
-			clearInterval(timer);
+			factory = function(){return window.webshims;};
 		}
-		if (typeof define === 'function' && define.amd && define.amd.jQuery) {
-			define('polyfiller', ['jquery'], factory);
-			clearInterval(timer);
-		}
-		
 	};
-	var timer = setInterval(start, 1);
+	
 	
 	window.webshims = {
 		setOptions: function(){
 			addAsync();
 			window.asyncWebshims.cfg.push(arguments);
 		},
+
 		ready: function(){
 			addAsync();
 			window.asyncWebshims.ready.push(arguments);
@@ -40,18 +35,62 @@
 		polyfill: function(features){
 			addAsync();
 			window.asyncWebshims.polyfill = features;
-		}
+		},
+		_curScript: (function(){
+			var scripts, i, scriptUrl;
+			//modern browsers: Chrome 29+, Firefox 4+
+			var currentScript = document.currentScript;
+
+			//in debug mode remove result to fully test fallback in all browsers
+			if(WSDEBUG){
+				currentScript = false;
+			}
+			if (!currentScript) {
+				//error trick: works in Safari, Chrome, Firefox, IE 10+
+				//idea found here: https://github.com/samyk/jiagra/
+				try {
+					throw(new Error(''));
+				} catch (e) {
+					//Safari has sourceURL
+					scriptUrl = (e.sourceURL || e.stack || '').split('\n');
+					//extract scriptUrl from stack: this is dangerous! All browsers have different string patterns (pattern can even vary between different browser versions). Help to make it bulletproof!!!
+					scriptUrl = ((scriptUrl[scriptUrl.length - 1] || scriptUrl[scriptUrl.length - 2] || '').match(/(?:fil|htt|wid|abo|app|res)(.)+/i) || [''])[0].replace(/[\:\s\(]+[\d\:\)\(\s]+$/, '');
+				}
+
+				scripts = document.scripts || document.getElementsByTagName('script');
+
+				//get script by URL or by readyState == 'interactive' (readySate is supported in IE10-)
+				//if this fails the last found script is set to the currentScript
+				for (i = 0; i < scripts.length; i++) {
+					if(scripts[i].getAttribute('src')){
+						currentScript = scripts[i];
+						if (scripts[i].readyState == 'interactive' || scriptUrl == scripts[i].src) {
+							if(WSDEBUG){
+								currentScript.wsFoundCurrent = true;
+							}
+							break;
+						}
+					}
+				}
+			}
+
+			return currentScript;
+		})()
 	};
 	window.webshim = window.webshims;
-	
+
+
+	window.webshims.timer = setInterval(start, 0);
 	start();
+
+	if (typeof define === 'function' && define.amd && define.amd.jQuery) {
+		define('polyfiller', ['jquery'], factory);
+	}
 }(function($){
 	"use strict";
-	if (typeof WSDEBUG === 'undefined') {
-		window.WSDEBUG = true;
-	}
+	var firstRun, path;
+	var webshims = window.webshims;
 	var DOMSUPPORT = 'dom-support';
-	var jScripts = $(document.scripts || 'script');
 	var special = $.event.special;
 	var emptyJ = $([]);
 	var Modernizr = window.Modernizr;
@@ -59,8 +98,6 @@
 	var addTest = Modernizr.addTest;
 	var Object = window.Object;
 	var html5 = window.html5 || {};
-	var firstRun;
-	var webshims = window.webshims;
 	var addSource = function(text){
 		return text +"\n//# sourceURL="+this.url;
 	};
@@ -70,9 +107,13 @@
 		Modernizr.ES5 = false;
 	}
 	
-	
+	clearInterval(webshims.timer);
+
+	path = ($.support.hrefNormalized === false) ? webshims._curScript.getAttribute("src", 4) : webshims._curScript.src;
+	path = path.split('?')[0].slice(0, path.lastIndexOf("/") + 1) + 'shims/';
+
 	$.extend(webshims, {
-		version: '1.12.0',
+		version: '1.12.2',
 		cfg: {
 			
 			//addCacheBuster: false,
@@ -80,23 +121,14 @@
 //			extendNative: false,
 			loadStyles: true,
 			disableShivMethods: true,
+			wsdoc: document,
 			wspopover: {appendTo: 'auto', hideOnBlur: true},
 			ajax: {},
 			loadScript: function(src, success, fail){
 				$.ajax($.extend({}, webCFG.ajax, {url: src, success: success, dataType: 'script', cache: true, global: false, dataFilter: addSource}));
 			},
 			
-			basePath: (function(){
-				var script = jScripts.filter('[src*="polyfiller.js"]');
-				var path;
-				script = script[0] || script.end()[script.end().length - 1];
-				if(WSDEBUG && document.currentScript && script !=  document.currentScript && document.currentScript.src){
-					webshims.warn("It seems you need to set webshims.setOptions('basePath', 'pathTo/shims/'); manually.");
-				}
-				path = ( ( !('hrefNormalized' in $.support) || $.support.hrefNormalized  ) ? script.src : script.getAttribute("src", 4) ).split('?')[0];
-				path = path.slice(0, path.lastIndexOf("/") + 1) + 'shims/';
-				return path;
-			})()
+			basePath: path
 		},
 		bugs: {},
 		/*
@@ -106,7 +138,7 @@
 		features: {},
 		featureList: [],
 		setOptions: function(name, opts){
-			if (typeof name == 'string' && opts !== undefined) {
+			if (typeof name == 'string' && arguments.length > 1) {
 				webCFG[name] = (!$.isPlainObject(opts)) ? opts : $.extend(true, webCFG[name] || {}, opts);
 			} else if (typeof name == 'object') {
 				$.extend(true, webCFG, name);
@@ -499,9 +531,10 @@
 			loadScript: (function(){
 				var loadedSrcs = {};
 				var scriptLoader;
-				return function(src, callback, name){
-				
-					src = loader.makePath(src);
+				return function(src, callback, name, noShimPath){
+					if(!noShimPath){
+						src = loader.makePath(src);
+					}
 					if (loadedSrcs[src]) {return;}
 					var complete = function(){
 						
@@ -554,10 +587,6 @@
 		error: 1
 	};
 	
-	if(webCFG.debug || (!('crossDomain' in webCFG.ajax) && location.protocol.indexOf('http'))){
-		webCFG.ajax.crossDomain = true;
-	}
-	
 	webshims.addMethodName = function(name){
 		name = name.split(':');
 		var prop = name[1];
@@ -595,10 +624,9 @@
 	
 
 	webshims.activeLang = (function(){
-		var curLang = navigator.browserLanguage || navigator.language || '';
+		var curLang = $('html').attr('lang') || navigator.browserLanguage || navigator.language || '';
 		onReady('webshimLocalization', function(){
 			webshims.activeLang(curLang);
-			
 		});
 		return function(lang){
 			if(lang){
@@ -627,6 +655,12 @@
 			}
 		};
 	});
+
+	if(WSDEBUG){
+		if(!webshims._curScript.wsFoundCurrent){
+			webshims.error('Could not detect currentScript! Use basePath to set script path.');
+		}
+	}
 	
 	/*
 	 * jQuery-plugins for triggering dom updates can be also very usefull in conjunction with non-HTML5 DOM-Changes (AJAX)
@@ -643,10 +677,10 @@
 	 */
 	
 	(function(){
-		
 		//Overwrite DOM-Ready and implement a new ready-method
 		$.isDOMReady = $.isReady;
-		var onReady = function(){
+		var onReady = function(e){
+
 			$.isDOMReady = true;
 			isReady('DOM', true);
 			setTimeout(function(){
@@ -656,6 +690,11 @@
 		
 		firstRun = function(){
 			if(!firstRun.run){
+				
+				if(webCFG.debug || (!('crossDomain' in webCFG.ajax) && location.protocol.indexOf('http'))){
+					webCFG.ajax.crossDomain = true;
+				}
+
 				if($.mobile && ($.mobile.textinput || $.mobile.rangeslider || $.mobile.button)){
 					if(WSDEBUG){
 						webshims.warn('jQM textinput/rangeslider/button detected waitReady was set to false. Use webshims.ready("featurename") to script against polyfilled methods/properties');
@@ -689,10 +728,7 @@
 			}
 			firstRun.run = true;
 		};
-		
-		setTimeout(function(){
-			$(onReady);
-		}, 4);
+
 		$(window).on('load', function(){
 			onReady();
 			setTimeout(function(){
@@ -712,7 +748,10 @@
 					webshims.ready('DOM', function(){fn(context, elem);});
 				};
 				readyFns.push(readyFn);
-				readyFn(document, emptyJ);
+
+				if(webCFG.wsdoc){
+					readyFn(webCFG.wsdoc, emptyJ);
+				}
 			},
 			triggerDomUpdate: function(context){
 				if(!context || !context.nodeType){
@@ -1100,9 +1139,6 @@
 			test: function(){
 				var o = this.options;
 				initialFormTest();
-				if(o.replaceUI){
-					$('html').addClass('ws-replaceui');
-				}
 				//input widgets on old androids can't be trusted
 				if(bustedWidgetUi && !o.replaceUI && (/Android/i).test(navigator.userAgent)){
 					o.replaceUI = true;
@@ -1232,43 +1268,48 @@
 	webshims.$ = $;
 	webshims.M = Modernizr;
 	window.webshims = webshims;
-	
-	jScripts
-		.filter('[data-polyfill-cfg]')
-		.each(function(){
-			try {
-				webshims.setOptions( $(this).data('polyfillCfg') );
-			} catch(e){
-				webshims.warn('error parsing polyfill cfg: '+e);
+
+	webshims.callAsync = function(){
+		webshims.callAsync = $.noop;
+		$(document.scripts || 'script')
+			.filter('[data-polyfill-cfg]')
+			.each(function(){
+				try {
+					webshims.setOptions( $(this).data('polyfillCfg') );
+				} catch(e){
+					webshims.warn('error parsing polyfill cfg: '+e);
+				}
+			})
+			.end()
+			.filter('[data-polyfill]')
+			.each(function(){
+				webshims.polyfill( $.trim( $(this).data('polyfill') || '' ) );
+			})
+		;
+		if(asyncWebshims){
+			if(asyncWebshims.cfg){
+				if(!asyncWebshims.cfg.length){
+					asyncWebshims.cfg = [[asyncWebshims.cfg]];
+				}
+				$.each(asyncWebshims.cfg, function(i, cfg){
+					webshims.setOptions.apply(webshims, cfg);
+				});
 			}
-		})
-		.end()
-		.filter('[data-polyfill]')
-		.each(function(){
-			webshims.polyfill( $.trim( $(this).data('polyfill') || '' ) );
-		})
-	;
-	if(asyncWebshims){
-		if(asyncWebshims.cfg){
-			if(!asyncWebshims.cfg.length){
-				asyncWebshims.cfg = [asyncWebshims.cfg];
+			if(asyncWebshims.ready){
+				$.each(asyncWebshims.ready, function(i, ready){
+					webshims.ready.apply(webshims, ready);
+				});
 			}
-			$.each(asyncWebshims.cfg, function(i, cfg){
-				webshims.setOptions.call(webshims, cfg);
-			});
+			if(asyncWebshims.lang){
+				webshims.activeLang(asyncWebshims.lang);
+			}
+			if('polyfill' in asyncWebshims){
+				webshims.polyfill(asyncWebshims.polyfill);
+			}
 		}
-		if(asyncWebshims.ready){
-			$.each(asyncWebshims.ready, function(i, ready){
-				webshims.ready.apply(webshims, ready);
-			});
-		}
-		if(asyncWebshims.lang){
-			webshims.activeLang(asyncWebshims.lang);
-		}
-		if('polyfill' in asyncWebshims){
-			webshims.polyfill(asyncWebshims.polyfill);
-		}
-	}
-	webshims.isReady('jquery', true);
+		webshims.isReady('jquery', true);
+	};
+
+	webshims.callAsync();
 	return webshims;
 }));

@@ -2290,7 +2290,13 @@ if((!advancedObjectProperties || !Object.create || !Object.defineProperties || !
 				lazyLoad('WINDOWLOAD');
 				
 				if(webshims.isReady('form-datalist-lazy')){
-					this._lazyCreate(opts);
+					if(window.QUnit){
+						that._lazyCreate(opts);
+					} else {
+						setTimeout(function(){
+							that._lazyCreate(opts);
+						}, 9);
+					}
 				} else {
 					$(opts.input).one('focus', lazyLoad);
 					webshims.ready('form-datalist-lazy', function(){
