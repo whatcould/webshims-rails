@@ -329,15 +329,43 @@ webshims.register('form-native-extend', function($, webshims, window, doc, undef
 		}
 		return message || '';
 	};
+	var lReg = /</g;
+	var gReg = />/g;
 	var valueVals = {
 		value: 1,
 		min: 1,
 		max: 1
 	};
+
+	webshims.replaceValidationplaceholder = function(elem, message, name){
+		var type, widget;
+		if(message && message.indexOf('{%') != -1){
+			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
+				if(message.indexOf('{%'+attr) === -1){return;}
+				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
+				if(name == 'patternMismatch' && attr == 'title' && !val){
+					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
+				}
+				if(valueVals[attr]){
+					if(!widget){
+						widget = $(elem).getShadowElement().data('wsWidget'+ (type = $.prop(elem, 'type')));
+					}
+					if(widget && widget.formatValue){
+						val = widget.formatValue(val, false);
+					}
+				}
+				message = message.replace('{%'+ attr +'}', val.replace(lReg, '&lt;').replace(gReg, '&gt;'));
+				if('value' == attr){
+					message = message.replace('{%valueLen}', val.length);
+				}
+
+			});
+		}
+		return message;
+	};
 	
 	webshims.createValidationMessage = function(elem, name){
-		var widget;
-		var type = $.prop(elem, 'type');
+
 		var message = getMessageFromObj(currentValidationMessage[name], elem);
 		if(!message && name == 'badInput'){
 			message = getMessageFromObj(currentValidationMessage.typeMismatch, elem);
@@ -347,30 +375,9 @@ webshims.register('form-native-extend', function($, webshims, window, doc, undef
 		}
 		if(!message){
 			message = getMessageFromObj(validityMessages[''][name], elem) || $.prop(elem, 'validationMessage');
-			webshims.info('could not find errormessage for: '+ name +' / '+ type +'. in language: '+webshims.activeLang());
+			webshims.info('could not find errormessage for: '+ name +' / '+ $.prop(elem, 'type') +'. in language: '+webshims.activeLang());
 		}
-		if(message){
-			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
-				if(message.indexOf('{%'+attr) === -1){return;}
-				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
-				if(name == 'patternMismatch' && attr == 'title' && !val){
-					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
-				}
-				if(valueVals[attr]){
-					if(!widget){
-						widget = $(elem).getShadowElement().data('wsWidget'+type);
-					}
-					if(widget && widget.formatValue){
-						val = widget.formatValue(val, false);
-					}
-				}
-				message = message.replace('{%'+ attr +'}', val);
-				if('value' == attr){
-					message = message.replace('{%valueLen}', val.length);
-				}
-				
-			});
-		}
+		message = webshims.replaceValidationplaceholder(elem, message, name);
 		
 		return message || '';
 	};

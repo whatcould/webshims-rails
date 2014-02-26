@@ -507,7 +507,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					message = elem.getErrorMessage();
 				}
 				if (message) {
-					api.contentElement.text(message);
+					api.contentElement.html(message);
 				} else {
 					this.hide();
 				}
@@ -623,7 +623,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 						$(elem).data('errormessage', errorMessages);
 					}
 					if(webshims.getOptions){
-						webshims.getOptions(elem, 'errormessage');
+						webshims.getOptions(elem, 'errormessage', false, true);
 					}
 				});
 
@@ -638,14 +638,16 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			if(!fieldWrapper){
 				fieldWrapper = this.getFieldWrapper(elem);
 			}
+			var type;
 			var errorBox = fieldWrapper.data('errorbox');
-			if(!errorBox){
-				errorBox = this.create(elem, fieldWrapper);
+			if((type = typeof errorBox) != 'object'){
+				if(!errorBox){
+					errorBox = this.create(elem, fieldWrapper);
+				} else if(type == 'string'){
+					errorBox = $('#'+errorBox);
+					fieldWrapper.data('errorbox', errorBox, fieldWrapper);
+				}
 				this._createContentMessage(elem, errorBox, fieldWrapper);
-			} else if(typeof errorBox == 'string'){
-				errorBox = $('#'+errorBox);
-				fieldWrapper.data('errorbox', errorBox, fieldWrapper);
-				this._createContentMessage(elem, errorBox);
 			}
 			return errorBox;
 		},
@@ -661,16 +663,15 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			check();
 		},
 		hideError: function(elem, reset){
-			var invalid;
+			var invalid, errorBox;
 			var fieldWrapper = this.getFieldWrapper(elem);
-			//only if an errorbox was already created! don't use this.get here!
-			var errorBox = fieldWrapper.data('errorbox');
 
-			if(errorBox && errorBox.jquery){
+			if(fieldWrapper.hasClass(invalidWrapperClass)){
 				$(elem).filter('input').off('.recheckinvalid');
 				if(!reset && (invalid = $('input:invalid, select:invalid, textarea:invalid', fieldWrapper)[0])){
 					$(invalid).trigger('refreshvalidityui');
 				} else {
+					errorBox = this.get(elem, fieldWrapper);
 					fieldWrapper.removeClass(invalidWrapperClass);
 					errorBox.message = '';
 					errorBox[fx[iVal.fx].hide](function(){
