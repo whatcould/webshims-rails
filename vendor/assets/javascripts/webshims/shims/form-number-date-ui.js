@@ -12,7 +12,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		if(!curCfg[selectName]){
 			var labels = curCfg.date[opts.monthNames] || monthDigits;
 			curCfg[selectName] = ('<option value=""></option>')+$.map(monthDigits, function(val, i){
-				return '<option value="'+val+'"]>'+labels[i]+'</option>';
+				return '<option value="'+val+'">'+labels[i]+'</option>';
 			}).join('');
 		}
 		return curCfg[selectName];
@@ -416,8 +416,12 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				var names;
 				var p = val.split('-');
 				if(p[0] && p[1]){
-					names = curCfg.date[options.monthNames] || curCfg.date.monthNames;
-					p[1] = names[(p[1] * 1) - 1];
+
+					if(!options || !options.monthSelect){
+						names = curCfg.date[options.monthNames] || curCfg.date.monthNames;
+						p[1] = names[(p[1] * 1) - 1];
+					}
+
 					if(options && options.splitInput){
 						val = [p[0] || '', p[1] || ''];
 					} else if(p[1]){
@@ -609,6 +613,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 						asValue: function(val){
 							var type = (typeof val == 'object') ? 'valueAsDate' : 'valueAsNumber';
 							return input.prop(type, val).prop('value');
+						},
+						asDate: function(val){
+							var type = (typeof val == 'number') ? 'valueAsNumber' : 'value';
+							return input.prop(type, val).prop('valueAsDate');
 						},
 						isValid: function(val, attrs){
 							if(attrs && (attrs.nodeName || attrs.jquery)){
@@ -883,6 +891,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				this.asNumber = helper.asNumber;
 				this.asValue = helper.asValue;
 				this.isValid = helper.isValid;
+				this.asDate = helper.asDate;
 				
 				
 				wsWidgetProto._create.apply(this, arguments);
@@ -1481,53 +1490,75 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			return $.css(this, 'display') != 'none';
 		};
 		var sizeInput = function(data){
-			var init;
+			var init, parent, lastWidth, left, right, isRtl, hasButtons;
+			var oriStyleO = data.orig.style;
+			var styleO = data.element[0].style;
+			if($.support.boxSizing == null && !$.isReady){
+				$(function(){
+					parent = data.orig.parentNode;
+				});
+			} else {
+				parent = data.orig.parentNode;
+			}
 			var updateStyles = function(){
-				$(data.orig).removeClass('ws-important-hide');
-				$.style( data.orig, 'display', '' );
-				var hasButtons, marginR, marginL, left, right, isRtl;
+				var curWidth, marginR, marginL, assignWidth;
 				var correctWidth = 0.8;
-				if(!init || data.orig.offsetWidth){
-					hasButtons = data.buttonWrapper && data.buttonWrapper.filter(isVisible).length;
-					
-					isRtl = hasButtons && data.buttonWrapper.css('direction') == 'rtl';
-					if(isRtl){
-						left = 'Right';
-						right = 'Left';
-					} else {
-						left = 'Left';
-						right = 'Right';
+
+				if(parent){
+					curWidth = parent.offsetWidth;
+				}
+
+				if(!init || (curWidth && curWidth != lastWidth)){
+					lastWidth = curWidth;
+					oriStyleO.display = '';
+					styleO.display = 'none';
+
+					if(!init){
+						hasButtons = data.buttonWrapper && data.buttonWrapper.filter(isVisible).length;
+						isRtl = hasButtons && data.buttonWrapper.css('direction') == 'rtl';
+						if(isRtl){
+							left = 'Right';
+							right = 'Left';
+						} else {
+							left = 'Left';
+							right = 'Right';
+						}
+						if(hasButtons){
+							data.buttonWrapper[isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+						}
 					}
-					
+
 					marginR = $.css( data.orig, 'margin'+right);
-					
-					data.element
-						.css('margin'+left, $.css( data.orig, 'margin'+left))
-						.css('margin'+right, hasButtons ? 0 : marginR)
-					;
+
+					styleO['margin'+left] = $.css( data.orig, 'margin'+left);
+					styleO['margin'+right] = hasButtons ? '0px' : marginR;
+
 					
 					if(hasButtons){
-						data.buttonWrapper[isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+
 						marginL = (parseInt(data.buttonWrapper.css('margin'+left), 10) || 0);
-						data.element.css('padding'+right, '');
-						
+						styleO['padding'+right] = '';
+
 						if(marginL < 0){
 							marginR = (parseInt(marginR, 10) || 0) + ((data.buttonWrapper.outerWidth() + marginL) * -1);
-							data.buttonWrapper.css('margin'+right, marginR);
-							data.element
-								.css('padding'+right, '')
-								.css('padding'+right, (parseInt( data.element.css('padding'+right), 10) || 0) + data.buttonWrapper.outerWidth())
-							;
+							data.buttonWrapper[0].style['margin'+right] = marginR+'px';
+
+							styleO['padding'+right] = ((parseInt( data.element.css('padding'+right), 10) || 0) + data.buttonWrapper.outerWidth()) +'px';
+
 						} else {
-							data.buttonWrapper.css('margin'+right, marginR);
+							data.buttonWrapper[0].style['margin'+right] = marginR;
 							correctWidth = data.buttonWrapper.outerWidth(true) + correctWidth;
 						}
 					}
-					
-					data.element.outerWidth( $(data.orig).outerWidth() - correctWidth );
+
+					assignWidth = $(data.orig).outerWidth() - correctWidth;
+
+					styleO.display = '';
+					data.element.outerWidth(assignWidth);
+					oriStyleO.display = 'none';
+					init = true;
 				}
-				init = true;
-				$(data.orig).addClass('ws-important-hide');
+
 			};
 			data.element.onWSOff('updateshadowdom', updateStyles, true);
 		};
@@ -1591,6 +1622,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				cNames = $.prop(this, 'className');
 				if(opts.classes){
 					cNames += ' '+opts.classes;
+					$(this).addClass(opts.classes);
 				}
 				
 				if(opts.splitInput || type == 'range'){
@@ -1663,7 +1695,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				if(opts.calculateWidth){
 					sizeInput(data.shim);
 				} else {
-					$(this).addClass('ws-important-hide');
+					$(this).css('display', 'none');
 				}
 			}
 			

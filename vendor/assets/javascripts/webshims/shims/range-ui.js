@@ -1,6 +1,6 @@
 (function($){
-	
-	var id = 0;
+	"use strict";
+
 	var isNumber = function(string){
 		return (typeof string == 'number' || (string && string == string * 1));
 	};
@@ -15,7 +15,7 @@
 		_create: function(){
 			var i;
 			
-			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span><span data-value="" data-valuetext="" /></span></span></span>');
+			this.element.addClass(this.options.baseClass || 'ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span><span data-value="" data-valuetext="" /></span></span></span>');
 			this.trail = $('.ws-range-track', this.element);
 			this.range = $('.ws-range-progress', this.element);
 			this.thumb = $('.ws-range-thumb', this.trail);
@@ -200,10 +200,12 @@
 		},
 		min: function(val){
 			this.options.min = retDefault(val, 0);
+			this.element.attr('aria-valuemin', this.options.min);
 			this.value(this.options.value, true);
 		},
 		max: function(val){
 			this.options.max = retDefault(val, 100);
+			this.element.attr('aria-valuemax', this.options.max);
 			this.value(this.options.value, true);
 		},
 		step: function(val){
@@ -376,8 +378,6 @@
 				if(e.target == window){remove();}
 			};
 			var add = function(e){
-				var outerWidth;
-				
 				if(isActive || (e.type == 'touchstart' && (!e.originalEvent || !e.originalEvent.touches || e.originalEvent.touches.length != 1))){
 					return;
 				}
@@ -392,7 +392,6 @@
 					leftOffset = that.element.offset();
 					widgetUnits = that.element[that.dirs.innerWidth]();
 					if(!widgetUnits || !leftOffset){return;}
-					outerWidth = that.thumb[that.dirs.outerWidth]();
 					leftOffset = leftOffset[that.dirs.pos];
 					widgetUnits = 100 / widgetUnits;
 
@@ -509,8 +508,13 @@
 				webshims.ready('WINDOWLOAD', function(){
 					webshims.ready('dom-support', function(){
 						if ($.fn.onWSOff) {
-							that.element.onWSOff('updateshadowdom', function(){
+							var timer;
+							var update = function(){
 								that.updateMetrics();
+							};
+							that.element.onWSOff('updateshadowdom', function(){
+								clearTimeout(timer);
+								timer = setTimeout(update, 100);
 							});
 						}
 					});
@@ -521,26 +525,26 @@
 			}
 		},
 		posCenter: function(elem, outerWidth){
-			var temp;
+			var temp, eS;
+
 			if(this.options.calcCenter && (!this._init || this.element[0].offsetWidth)){
 				if(!elem){
 					elem = this.thumb;
 				}
+				eS = elem[0].style;
 				if(!outerWidth){
 					outerWidth = elem[this.dirs.outerWidth]();
 				}
 				outerWidth = outerWidth / -2;
-				elem.css(this.dirs.marginLeft, outerWidth);
-				
+				eS[this.dirs.marginLeft] = outerWidth +'px';
+
 				if(this.options.calcTrail && elem[0] == this.thumb[0]){
 					temp = this.element[this.dirs.innerHeight]();
-					elem.css(this.dirs.marginTop, (elem[this.dirs.outerHeight]() - temp) / -2);
-					this.range.css(this.dirs.marginTop, (this.range[this.dirs.outerHeight]() - temp) / -2 );
+					eS[this.dirs.marginTop] = ((elem[this.dirs.outerHeight]() - temp) / -2) + 'px';
+					this.range[0].style[this.dirs.marginTop] = ((this.range[this.dirs.outerHeight]() - temp) / -2 ) +'px';
 					outerWidth *= -1;
-					this.trail
-						.css(this.dirs.left, outerWidth)
-						.css(this.dirs.right, outerWidth)
-					;
+					this.trail[0].style[this.dirs.left] = outerWidth +'px';
+					this.trail[0].style[this.dirs.right] = outerWidth +'px';
 				}
 			}
 		},
@@ -584,7 +588,7 @@
 			value: 50, 
 			input: $.noop, 
 			change: $.noop, 
-			_change: $.noop, 
+			_change: $.noop,
 			showLabels: true, 
 			options: {},
 			calcCenter: true,

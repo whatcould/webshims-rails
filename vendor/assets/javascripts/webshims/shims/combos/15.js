@@ -616,7 +616,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					$.each({ Height: "getHeight", Width: "getWidth" }, function(name, type){
 						var body = document.body;
 						var doc = document.documentElement;
-						docObserve[type] = function(){
+						docObserve[type] = function (){
 							return Math.max(
 								body[ "scroll" + name ], doc[ "scroll" + name ],
 								body[ "offset" + name ], doc[ "offset" + name ],
@@ -631,24 +631,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						this._create();
 						this.height = docObserve.getHeight();
 						this.width = docObserve.getWidth();
-						setInterval(this.test, 600);
+						setInterval(this.test, 999);
 						$(this.test);
 						webshims.ready('WINDOWLOAD', this.test);
 						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
 						$(window).on('resize', this.handler);
-						(function(){
-							var oldAnimate = $.fn.animate;
-							var animationTimer;
-							
-							$.fn.animate = function(){
-								clearTimeout(animationTimer);
-								animationTimer = setTimeout(function(){
-									docObserve.test();
-								}, 99);
-								
-								return oldAnimate.apply(this, arguments);
-							};
-						})();
 					}
 				}
 			};
@@ -1143,8 +1130,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	
 })();
 });
-;
-webshims.register('form-core', function($, webshims, window, document, undefined, options){
+;webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
 
 	webshims.capturingEventPrevented = function(e){
@@ -1170,6 +1156,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		webshims.capturingEvents(['invalid'], true);
 	}
 
+	var modules = webshims.modules;
 	var isValid = function(elem){
 		return ($.prop(elem, 'validity') || {valid: 1}).valid;
 	};
@@ -1179,10 +1166,12 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			options.customMessages = true;
 			toLoad.push('form-message');
 		}
-		if(options.customDatalist){
+
+		if(webshims._getAutoEnhance(options.customDatalist)){
 			options.fD = true;
 			toLoad.push('form-datalist');
 		}
+
 		if(options.addValidators){
 			toLoad.push('form-validators');
 		}
@@ -1196,7 +1185,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	var hasInvalid = function(elem){
 		var ret = false;
 		$(elem).jProp('elements').each(function(){
-			if(!rElementsGroup.test(elem.nodeName || '')){
+			if(!rElementsGroup.test(this.nodeName || '')){
 				ret = $(this).is(':invalid');
 				if(ret){
 					return false;
@@ -1391,14 +1380,27 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 		return message;
 	};
-	
+
+	$.event.special.valuevalidation = {
+		setup: function(){
+			var data = $(this).data() || $.data(this, {});
+			if(!('valuevalidation' in data)){
+				data.valuevalidation = true;
+			}
+		}
+	};
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
 		if('form' in e.target){
 			lazyLoad();
 		}
 	});
+
 	webshims.ready('WINDOWLOAD', lazyLoad);
+
+	if(modules['form-number-date-ui'].loaded && modules['form-number-date-api'].test()){
+		webshims.isReady('form-number-date-ui', true);
+	}
 });
 ;webshims.register('form-shim-extend', function($, webshims, window, document, undefined, options){
 "use strict";
@@ -1498,22 +1500,18 @@ var isPlaceholderOptionSelected = function(select){
 var emptyJ = $([]);
 var getGroupElements = function(elem){
 	elem = $(elem);
-	var name;
-	var form;
+	var name, form;
 	var ret = emptyJ;
 	if(elem[0].type == 'radio'){
-		form = elem.prop('form');
 		name = elem[0].name;
 		if(!name){
 			ret = elem;
-		} else if(form){
-			ret = $(form[name]);
 		} else {
+			form = elem.prop('form');
 			ret = $(document.getElementsByName(name)).filter(function(){
-				return !$.prop(this, 'form');
+				return this.type == 'radio' && this.name == name && $.prop(this, 'form') == form;
 			});
 		}
-		ret = ret.filter('[type="radio"]');
 	}
 	return ret;
 };
@@ -1890,21 +1888,23 @@ webshims.defineNodeNameProperty('form', 'noValidate', {
 	}
 });
 
-webshims.defineNodeNamesProperty(['input', 'textarea'], 'minLength', {
-		prop: {
-			set: function(val){
-				val *= 1;
-				if(val < 0){
-					throw('INDEX_SIZE_ERR');
+['minlength', 'minLength'].forEach(function(propName){
+	webshims.defineNodeNamesProperty(['input', 'textarea'], propName, {
+			prop: {
+				set: function(val){
+					val *= 1;
+					if(val < 0){
+						throw('INDEX_SIZE_ERR');
+					}
+					this.setAttribute('minlength', val || 0);
+				},
+				get: function(){
+					var val = this.getAttribute('minlength');
+					return val == null ? -1 : (val * 1) || 0;
 				}
-				this.setAttribute('minlength', val || 0);
-			},
-			get: function(){
-				var val = this.getAttribute('minlength');
-				return val == null ? -1 : (val * 1) || 0;
 			}
-		}
-})
+	});
+});
 
 if(Modernizr.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 	(function(){
@@ -2331,9 +2331,11 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
 				if(message.indexOf('{%'+attr) === -1){return;}
 				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
+				val = ''+val;
 				if(name == 'patternMismatch' && attr == 'title' && !val){
 					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
 				}
+
 				if(valueVals[attr]){
 					if(!widget){
 						widget = $(elem).getShadowElement().data('wsWidget'+ (type = $.prop(elem, 'type')));

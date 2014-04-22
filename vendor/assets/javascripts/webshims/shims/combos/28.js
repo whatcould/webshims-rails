@@ -96,22 +96,18 @@ var isPlaceholderOptionSelected = function(select){
 var emptyJ = $([]);
 var getGroupElements = function(elem){
 	elem = $(elem);
-	var name;
-	var form;
+	var name, form;
 	var ret = emptyJ;
 	if(elem[0].type == 'radio'){
-		form = elem.prop('form');
 		name = elem[0].name;
 		if(!name){
 			ret = elem;
-		} else if(form){
-			ret = $(form[name]);
 		} else {
+			form = elem.prop('form');
 			ret = $(document.getElementsByName(name)).filter(function(){
-				return !$.prop(this, 'form');
+				return this.type == 'radio' && this.name == name && $.prop(this, 'form') == form;
 			});
 		}
-		ret = ret.filter('[type="radio"]');
 	}
 	return ret;
 };
@@ -488,21 +484,23 @@ webshims.defineNodeNameProperty('form', 'noValidate', {
 	}
 });
 
-webshims.defineNodeNamesProperty(['input', 'textarea'], 'minLength', {
-		prop: {
-			set: function(val){
-				val *= 1;
-				if(val < 0){
-					throw('INDEX_SIZE_ERR');
+['minlength', 'minLength'].forEach(function(propName){
+	webshims.defineNodeNamesProperty(['input', 'textarea'], propName, {
+			prop: {
+				set: function(val){
+					val *= 1;
+					if(val < 0){
+						throw('INDEX_SIZE_ERR');
+					}
+					this.setAttribute('minlength', val || 0);
+				},
+				get: function(){
+					var val = this.getAttribute('minlength');
+					return val == null ? -1 : (val * 1) || 0;
 				}
-				this.setAttribute('minlength', val || 0);
-			},
-			get: function(){
-				var val = this.getAttribute('minlength');
-				return val == null ? -1 : (val * 1) || 0;
 			}
-		}
-})
+	});
+});
 
 if(Modernizr.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 	(function(){
@@ -929,9 +927,11 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
 				if(message.indexOf('{%'+attr) === -1){return;}
 				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
+				val = ''+val;
 				if(name == 'patternMismatch' && attr == 'title' && !val){
 					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
 				}
+
 				if(valueVals[attr]){
 					if(!widget){
 						widget = $(elem).getShadowElement().data('wsWidget'+ (type = $.prop(elem, 'type')));

@@ -11,7 +11,7 @@
 		}
 	};
 	var start = function(){
-		if(window.jQuery){
+		if(window.jQuery && window.Modernizr){
 			factory(jQuery);
 			factory = function(){return window.webshims;};
 		}
@@ -83,7 +83,7 @@
 	window.webshims.timer = setInterval(start, 0);
 	start();
 
-	if (typeof define === 'function' && define.amd && define.amd.jQuery) {
+	if (typeof define === 'function' && define.amd) {
 		define('polyfiller', ['jquery'], factory);
 	}
 }(function($){
@@ -97,39 +97,49 @@
 	var asyncWebshims = window.asyncWebshims;
 	var addTest = Modernizr.addTest;
 	var Object = window.Object;
-	var html5 = window.html5 || {};
 	var addSource = function(text){
 		return text +"\n//# sourceURL="+this.url;
 	};
+	var getAutoEnhance = function(prop){
+		return !webCFG.enhanceAuto && prop == 'auto' ? false : prop;
+	};
+
+	clearInterval(webshims.timer);
 	Modernizr.advancedObjectProperties = Modernizr.objectAccessor = Modernizr.ES5 = !!('create' in Object && 'seal' in Object);
-	
+
 	if(Modernizr.ES5 && !('toJSON' in Date.prototype)){
 		Modernizr.ES5 = false;
 	}
-	
-	clearInterval(webshims.timer);
+
 
 	path = ($.support.hrefNormalized === false) ? webshims._curScript.getAttribute("src", 4) : webshims._curScript.src;
 	path = path.split('?')[0].slice(0, path.lastIndexOf("/") + 1) + 'shims/';
 
 	$.extend(webshims, {
-		version: '1.12.3',
+		version: '1.12.5',
 		cfg: {
-			
+			enhanceAuto: window.Audio && (!window.matchMedia || matchMedia('(min-device-width: 719px)').matches),
 			//addCacheBuster: false,
 			waitReady: true,
 //			extendNative: false,
 			loadStyles: true,
-			disableShivMethods: true,
 			wsdoc: document,
 			wspopover: {appendTo: 'auto', hideOnBlur: true},
 			ajax: {},
-			loadScript: function(src, success, fail){
-				$.ajax($.extend({}, webCFG.ajax, {url: src, success: success, dataType: 'script', cache: true, global: false, dataFilter: addSource}));
+			loadScript: function(src, success){
+				if(!$.ajax){
+					if(window.yepnope){
+						yepnope.injectJs(src, success);
+					} else if(window.require){
+						require([src], success);
+					}
+				} else {
+					$.ajax($.extend({}, webCFG.ajax, {url: src, success: success, dataType: 'script', cache: true, global: false, dataFilter: addSource}));
+				}
 			},
-			
 			basePath: path
 		},
+
 		bugs: {},
 		/*
 		 * some data
@@ -144,6 +154,7 @@
 				$.extend(true, webCFG, name);
 			}
 		},
+		_getAutoEnhance: getAutoEnhance,
 		addPolyfill: function(name, cfg){
 			cfg = cfg || {};
 			var feature = cfg.f || name;
@@ -437,7 +448,7 @@
 					}
 				};
 				
-				return function(list, combo){
+				return function(list){
 					var module;
 					var loadCombos = [];
 					var i;
@@ -530,7 +541,6 @@
 			
 			loadScript: (function(){
 				var loadedSrcs = {};
-				var scriptLoader;
 				return function(src, callback, name, noShimPath){
 					if(!noShimPath){
 						src = loader.makePath(src);
@@ -601,6 +611,7 @@
 			return this.callProp(prop, arguments);
 		};
 	};
+
 	$.fn.callProp = function(prop, args){
 		var ret;
 		if(!args){
@@ -679,7 +690,7 @@
 	(function(){
 		//Overwrite DOM-Ready and implement a new ready-method
 		$.isDOMReady = $.isReady;
-		var onReady = function(e){
+		var onReady = function(){
 
 			$.isDOMReady = true;
 			isReady('DOM', true);
@@ -900,7 +911,7 @@
 	modules.swfmini.test();
 	
 	addModule('sizzle', {test: $.expr.filters});
-	addModule('$ajax', {test: $.ajax});
+	addModule('jajax', {test: $.ajax && $.ajaxSettings.xhr});
 	/* 
 	 * polyfill-Modules 
 	 */
@@ -988,7 +999,9 @@
 				
 				if(Modernizr[formvalidation]){
 					bustedWidgetUi = !Modernizr.fieldsetdisabled ||!Modernizr.fieldsetelements || !('value' in document.createElement('progress')) || !('value' in document.createElement('output'));
-					bugs.bustedValidity = bustedValidity = window.opera || bustedWidgetUi || !modernizrInputAttrs.list;
+					bugs.bustedValidity = bustedValidity = window.opera || bugs.bustedValidity || bustedWidgetUi || !modernizrInputAttrs.list;
+				} else {
+					bugs.bustedValidity = false;
 				}
 
 				formExtend = Modernizr[formvalidation] && !bustedValidity ? 'form-native-extend' : fShim;
@@ -997,10 +1010,7 @@
 			initialFormTest.run = true;
 			return false;
 		};
-		
-		if(modernizrInputAttrs && modernizrInputTypes){
-			initialFormTest();
-		}
+
 		document.createElement('datalist');
 				
 		
@@ -1128,6 +1138,9 @@
 			test: function(){
 				var o = this.options;
 				initialFormTest();
+
+				o.replaceUI = getAutoEnhance(o.replaceUI);
+
 				//input widgets on old androids can't be trusted
 				if(bustedWidgetUi && !o.replaceUI && (/Android/i).test(navigator.userAgent)){
 					o.replaceUI = true;
@@ -1195,8 +1208,22 @@
 		addPolyfill('mediaelement-core', {
 			f: 'mediaelement',
 			noAutoCallback: true,
+			loadInit: function(){
+				//
+				var o = this.options;
+				o.replaceUI = getAutoEnhance(o.replaceUI);
+
+				if(o.replaceUI){
+					o.plugins.unshift('mediacontrols');
+				}
+				setTimeout(function(){
+					loadList(o.plugins);
+				});
+			},
 			options: {
-				preferFlash: false,
+				//replaceUI: false,
+				jme: {},
+				plugins: [],
 				vars: {},
 				params: {},
 				attrs: {},
@@ -1211,13 +1238,14 @@
 		
 		addPolyfill('mediaelement-jaris', {
 			f: 'mediaelement',
-			d: ['mediaelement-core', 'swfmini', DOMSUPPORT],
+			d: ['mediaelement-core', DOMSUPPORT],
 			test: function(){
+				var options = this.options;
+
 				if(!Modernizr.audio || !Modernizr.video || webshims.mediaelement.loadSwf){
 					return false;
 				}
-				
-				var options = this.options;
+
 				if(options.preferFlash && !modules.swfmini.test()){
 					options.preferFlash = false;
 				}
@@ -1225,23 +1253,39 @@
 			},
 			c: [21, 19, 25, 20]
 		});
-		
-		bugs.track = !Modernizr.texttrackapi;
-		
+
+
+		bugs.track = !window.TextTrackCue || !Modernizr.texttrackapi;
+
 		addPolyfill('track', {
 			options: {
 				positionDisplay: true,
 				override: bugs.track
 			},
 			test: function(){
-				return !this.options.override && !bugs.track;
+				var o = this.options;
+				o.override = getAutoEnhance(o.override);
+				return !o.override && !bugs.track;
 			},
 			d: ['mediaelement', DOMSUPPORT],
 			methodNames: ['addTextTrack'],
 			c: [21, 12, 13, 22]
 		});
-		
-		
+
+		//if(WSDEBUG){
+			addModule('jme', {
+				src: 'jme/b',
+				c: [99]
+			});
+
+			addModule('mediacontrols', {
+				src: 'jme/c',
+				css: 'jme/controls.css',
+				d: ['jme'],
+				c: [99]
+			});
+		//}
+
 		addModule('track-ui', {
 			d: ['track', DOMSUPPORT]
 		});

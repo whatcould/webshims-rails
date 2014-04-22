@@ -96,22 +96,18 @@ var isPlaceholderOptionSelected = function(select){
 var emptyJ = $([]);
 var getGroupElements = function(elem){
 	elem = $(elem);
-	var name;
-	var form;
+	var name, form;
 	var ret = emptyJ;
 	if(elem[0].type == 'radio'){
-		form = elem.prop('form');
 		name = elem[0].name;
 		if(!name){
 			ret = elem;
-		} else if(form){
-			ret = $(form[name]);
 		} else {
+			form = elem.prop('form');
 			ret = $(document.getElementsByName(name)).filter(function(){
-				return !$.prop(this, 'form');
+				return this.type == 'radio' && this.name == name && $.prop(this, 'form') == form;
 			});
 		}
-		ret = ret.filter('[type="radio"]');
 	}
 	return ret;
 };
@@ -488,21 +484,23 @@ webshims.defineNodeNameProperty('form', 'noValidate', {
 	}
 });
 
-webshims.defineNodeNamesProperty(['input', 'textarea'], 'minLength', {
-		prop: {
-			set: function(val){
-				val *= 1;
-				if(val < 0){
-					throw('INDEX_SIZE_ERR');
+['minlength', 'minLength'].forEach(function(propName){
+	webshims.defineNodeNamesProperty(['input', 'textarea'], propName, {
+			prop: {
+				set: function(val){
+					val *= 1;
+					if(val < 0){
+						throw('INDEX_SIZE_ERR');
+					}
+					this.setAttribute('minlength', val || 0);
+				},
+				get: function(){
+					var val = this.getAttribute('minlength');
+					return val == null ? -1 : (val * 1) || 0;
 				}
-				this.setAttribute('minlength', val || 0);
-			},
-			get: function(){
-				var val = this.getAttribute('minlength');
-				return val == null ? -1 : (val * 1) || 0;
 			}
-		}
-})
+	});
+});
 
 if(Modernizr.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 	(function(){
@@ -862,7 +860,7 @@ webshims.defineNodeNamesBooleanProperty(['input', 'textarea', 'select'], 'requir
 	set: function(value){
 		$(this).getShadowFocusElement().attr('aria-required', !!(value)+'');
 	},
-	initAttr: Modernizr.localstorage //only if we have aria-support
+	initAttr: true
 });
 
 webshims.reflectProperties(['input'], ['pattern']);
@@ -1738,8 +1736,7 @@ if(!('setSelectionRange' in document.createElement('input'))){
 			return $( hasLabel(elem) ? '<span class="placeholder-text"></span>' : '<label for="'+ elem.prop('id') +'" class="placeholder-text"></label>');
 		},
 		pHolder = (function(){
-			var delReg 	= /\n|\r|\f|\t/g,
-				allowedPlaceholder = {
+			var allowedPlaceholder = {
 					text: 1,
 					search: 1,
 					url: 1,
@@ -1807,20 +1804,39 @@ if(!('setSelectionRange' in document.createElement('input'))){
 							var size = (parseInt($.css(elem, 'padding'+ side), 10) || 0) + Math.max((parseInt($.css(elem, 'margin'+ side), 10) || 0), 0) + (parseInt($.css(elem, 'border'+ side +'Width'), 10) || 0);
 							data.text.css('padding'+ side, size);
 						});
-						
+
 						$(elem)
-							.onWSOff('updateshadowdom', function(){
-								var height, width; 
-								if((width = elem.offsetWidth) || (height = elem.offsetHeight)){
-									data.text
-										.css({
-											width: width,
-											height: height
-										})
-										.css($(elem).position())
-									;
-								}
-							}, true)
+							.onWSOff('updateshadowdom', (function(){
+								var lastWidth, init, timer;
+								var jelm = $(elem);
+								var lastPos = {};
+								return function(){
+									var width, fn;
+
+									if((width = elem.offsetWidth)){
+
+										fn = function(){
+											var pos = jelm.position();
+											if(width !== lastWidth){
+												lastWidth = width;
+												data.text[0].style.width = width +'px';
+											}
+											if(pos.top !== lastPos.top || pos.left !== lastPos.left){
+												lastPos = pos;
+												data.text[0].style.top = pos.top +'px';
+												data.text[0].style.left = pos.left +'px';
+											}
+										};
+										if(!init){
+											fn();
+											init = true;
+										} else {
+											clearTimeout(timer);
+											timer = setTimeout(fn, 99);
+										}
+									}
+								};
+							})(), true)
 						;
 						
 					} else {

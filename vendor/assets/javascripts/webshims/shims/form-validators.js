@@ -93,6 +93,18 @@ webshims.register('form-validators', function($, webshims, window, document, und
 		return message;
 	};
 	var testValidityRules = webshims.refreshCustomValidityRules;
+
+	if(typeof document.activeElement != 'unknown'){
+		$('body').on('click', function(e){
+			if(e.target.type == 'submit'){
+				var activeElement = document.activeElement;
+
+				if(activeElement != e.target && $.data(activeElement, 'webshimsswitchvalidityclass')){
+					$(activeElement).trigger('refreshvalidityui');
+				}
+			}
+		});
+	}
 	
 	webshims.ready('forms form-validation', function(){
 		
@@ -264,12 +276,10 @@ webshims.register('form-validators', function($, webshims, window, document, und
 				$(data.masterElement.type === 'radio' && getGroupElements(data.masterElement) || data.masterElement).on('change', depFn);
 			} else {
 				$(data.masterElement).on('change', function(){
+					webshims.refreshCustomValidityRules(elem);
 					$(elem)
 						.getShadowElement()
 						.filter('.user-error, .user-success')
-						.each(function(){
-							webshims.refreshCustomValidityRules(elem);
-						})
 						.trigger('refreshvalidityui')
 					;
 				});
@@ -284,8 +294,14 @@ webshims.register('form-validators', function($, webshims, window, document, und
 		}
 		
 	}, 'The value of this field does not repeat the value of the other field');
-	
-	
+
+	addCustomValidityRule('valuevalidation', function(elem, val, data){
+		if(val && ('valuevalidation' in data)){
+			//Todo allow markup params
+			return $(elem).triggerHandler('valuevalidation', [{value: val, valueAsDate: $.prop(elem, 'valueAsDate'), isPartial: false}]) || '';
+		}
+	}, 'This value is not allowed here');
+
 	if(window.JSON){
 		addCustomValidityRule('ajaxvalidate', function(elem, val, data){
 			if(!val || !data.ajaxvalidate){return;}

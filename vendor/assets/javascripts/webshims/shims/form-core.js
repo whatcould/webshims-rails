@@ -1,4 +1,3 @@
-
 webshims.register('form-core', function($, webshims, window, document, undefined, options){
 	"use strict";
 
@@ -25,6 +24,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		webshims.capturingEvents(['invalid'], true);
 	}
 
+	var modules = webshims.modules;
 	var isValid = function(elem){
 		return ($.prop(elem, 'validity') || {valid: 1}).valid;
 	};
@@ -34,10 +34,12 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			options.customMessages = true;
 			toLoad.push('form-message');
 		}
-		if(options.customDatalist){
+
+		if(webshims._getAutoEnhance(options.customDatalist)){
 			options.fD = true;
 			toLoad.push('form-datalist');
 		}
+
 		if(options.addValidators){
 			toLoad.push('form-validators');
 		}
@@ -51,7 +53,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	var hasInvalid = function(elem){
 		var ret = false;
 		$(elem).jProp('elements').each(function(){
-			if(!rElementsGroup.test(elem.nodeName || '')){
+			if(!rElementsGroup.test(this.nodeName || '')){
 				ret = $(this).is(':invalid');
 				if(ret){
 					return false;
@@ -246,12 +248,25 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 		}
 		return message;
 	};
-	
+
+	$.event.special.valuevalidation = {
+		setup: function(){
+			var data = $(this).data() || $.data(this, {});
+			if(!('valuevalidation' in data)){
+				data.valuevalidation = true;
+			}
+		}
+	};
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
 		if('form' in e.target){
 			lazyLoad();
 		}
 	});
+
 	webshims.ready('WINDOWLOAD', lazyLoad);
+
+	if(modules['form-number-date-ui'].loaded && modules['form-number-date-api'].test()){
+		webshims.isReady('form-number-date-ui', true);
+	}
 });

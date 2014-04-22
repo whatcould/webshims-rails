@@ -214,9 +214,9 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		};
 	})();
 	var emptyDiv = $('<div />')[0];
-	var TextTrackCue = function(startTime, endTime, text){
+	function VTTCue(startTime, endTime, text){
 		if(arguments.length != 3){
-			webshims.error("wrong arguments.length for TextTrackCue.constructor");
+			webshims.error("wrong arguments.length for VTTCue.constructor");
 		}
 		
 		this.startTime = startTime;
@@ -225,9 +225,9 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		
 		
 		createEventTarget(this);
-	};
+	}
 	
-	TextTrackCue.prototype = {
+	VTTCue.prototype = {
 		
 		onenter: null,
 		onexit: null,
@@ -269,11 +269,14 @@ webshims.register('track', function($, webshims, window, document, undefined){
 //			align: 'middle'
 	};
 	
-	window.TextTrackCue = TextTrackCue;
-	
-	
-	
-	
+	window.VTTCue = VTTCue;
+	window.TextTrackCue = function(){
+		webshims.error("Use VTTCue constructor instead of abstract TextTrackCue constructor.");
+		VTTCue.apply(this, arguments);
+	};
+
+	window.TextTrackCue.prototype = VTTCue.prototype;
+
 	mediaelement.createCueList = function(){
 		return $.extend([], cueListProto);
 	};
@@ -318,8 +321,10 @@ webshims.register('track', function($, webshims, window, document, undefined){
 		var loadEvents = 'play playing updatetrackdisplay';
 		var obj = trackData.track;
 		var load = function(){
-			var error, ajax, src, createAjax;
-			if(obj.mode != 'disabled' && $.attr(track, 'src') && (src = $.prop(track, 'src'))){
+			var error, ajax, createAjax;
+
+			var src = obj.mode != 'disabled' && ($.attr(track, 'src') && $.prop(track, 'src'));
+			if(src){
 				$(mediaelem).off(loadEvents, load);
 				if(!trackData.readyState){
 					error = function(){
@@ -357,8 +362,8 @@ webshims.register('track', function($, webshims, window, document, undefined){
 						if($.ajax){
 							createAjax();
 						} else {
-							webshims.ready('$ajax', createAjax);
-							webshims.loader.loadList(['$ajax']);
+							webshims.ready('jajax', createAjax);
+							webshims.loader.loadList(['jajax']);
 						}
 					} catch(er){
 						error();
@@ -455,19 +460,17 @@ modified for webshims
 	mediaelement.parseCaptionChunk = (function(){
 		// Set up timestamp parsers
 		var WebVTTTimestampParser			= /^(\d{2})?:?(\d{2}):(\d{2})\.(\d+)\s+\-\-\>\s+(\d{2})?:?(\d{2}):(\d{2})\.(\d+)\s*(.*)/;
-		var GoogleTimestampParser		= /^([\d\.]+)\s+\+([\d\.]+)\s*(.*)/;
 		var WebVTTDEFAULTSCueParser		= /^(DEFAULTS|DEFAULT)\s+\-\-\>\s+(.*)/g;
 		var WebVTTSTYLECueParser		= /^(STYLE|STYLES)\s+\-\-\>\s*\n([\s\S]*)/g;
 		var WebVTTCOMMENTCueParser		= /^(COMMENT|COMMENTS)\s+\-\-\>\s+(.*)/g;
 		
 		return function(subtitleElement,objectCount){
-			var cueDefaults = [];
-		
-			var subtitleParts, timeIn, timeOut, html, timeData, subtitlePartIndex, cueSettings = "", id, specialCueData;
+
+			var subtitleParts, timeIn, timeOut, html, timeData, subtitlePartIndex, id, specialCueData;
 			var timestampMatch, tmpCue;
 
 			// WebVTT Special Cue Logic
-			if ((specialCueData = WebVTTDEFAULTSCueParser.exec(subtitleElement))) {
+			if (WebVTTDEFAULTSCueParser.exec(subtitleElement)) {
 //				cueDefaults = specialCueData.slice(2).join("");
 //				cueDefaults = cueDefaults.split(/\s+/g).filter(function(def) { return def && !!def.length; });
 				return null;
@@ -544,7 +547,7 @@ modified for webshims
 						return previous;
 					},compositeCueSettings);
 			
-			// Turn back into string like the TextTrackCue constructor expects
+			// Turn back into string like the VTTCue constructor expects
 			cueSettings = "";
 			for (var key in compositeCueSettings) {
 				if (compositeCueSettings.hasOwnProperty(key)) {
@@ -555,7 +558,7 @@ modified for webshims
 */
 			// The remaining lines are the subtitle payload itself (after removing an ID if present, and the time);
 			html = subtitleParts.join("\n");
-			tmpCue = new TextTrackCue(timeIn, timeOut, html);
+			tmpCue = new VTTCue(timeIn, timeOut, html);
 			if(id){
 				tmpCue.id = id;
 			}
@@ -564,10 +567,10 @@ modified for webshims
 	})();
 	
 	mediaelement.parseCaptions = function(captionData, track, complete) {
-		var subtitles = mediaelement.createCueList();
-		var cue, lazyProcess, regWevVTT;
-		var startDate;
-		var isWEBVTT;
+
+		var cue, lazyProcess, regWevVTT, startDate, isWEBVTT;
+
+		mediaelement.createCueList();
 		if (captionData) {
 			
 			regWevVTT = /^WEBVTT(\s*FILE)?/ig;
@@ -747,7 +750,6 @@ modified for webshims
 		},
 		readyState: {
 			get: function(){
-				
 				return (webshims.data(this, 'trackData') || {readyState: 0}).readyState;
 			},
 			writeable: false
@@ -812,29 +814,27 @@ modified for webshims
 			e.stopImmediatePropagation();
 		}
 	};
-	var startTrackImplementation = function(){
+	var hideNativeTracks = function(){
 		if(webshims.implement(this, 'track')){
-			var shimedTrack = $.prop(this, 'track');
-			var origTrack = this.track;
 			var kind;
-			var readyState;
+			var origTrack = this.track;
 			if(origTrack){
-				kind = $.prop(this, 'kind');
-				readyState = getNativeReadyState(this, origTrack);
-				if (origTrack.mode || readyState) {
-					shimedTrack.mode = numericModes[origTrack.mode] || origTrack.mode;
+
+				if (!webshims.bugs.track && (origTrack.mode || getNativeReadyState(this, origTrack))) {
+					$.prop(this, 'track').mode = numericModes[origTrack.mode] || origTrack.mode;
 				}
 				//disable track from showing + remove UI
-				if(kind != 'descriptions'){
-					origTrack.mode = (typeof origTrack.mode == 'string') ? 'disabled' : 0;
-					this.kind = 'metadata';
-					$(this).attr({kind: kind});
-				}
+				kind = $.prop(this, 'kind');
+				origTrack.mode = (typeof origTrack.mode == 'string') ? 'disabled' : 0;
+				this.kind = 'metadata';
+
+				$(this).attr({kind: kind});
 				
 			}
 			$(this).on('load error', stopOriginalEvent);
 		}
 	};
+
 	webshims.addReady(function(context, insertedElement){
 		var insertedMedia = insertedElement.filter('video, audio, track').closest('audio, video');
 		$('video, audio', context)
@@ -851,10 +851,11 @@ modified for webshims
 						webshims.error("textTracks couldn't be copied");
 					}
 					
-					$('track', this).each(startTrackImplementation);
+					$('track', this).each(hideNativeTracks);
 				}
 			})
 		;
+
 		insertedMedia.each(function(){
 			var media = this;
 			var baseData = webshims.data(media, 'mediaelementBase');

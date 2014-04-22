@@ -604,8 +604,8 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 	}
 	
 });;(function($){
-	
-	var id = 0;
+	"use strict";
+
 	var isNumber = function(string){
 		return (typeof string == 'number' || (string && string == string * 1));
 	};
@@ -620,7 +620,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		_create: function(){
 			var i;
 			
-			this.element.addClass('ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span><span data-value="" data-valuetext="" /></span></span></span>');
+			this.element.addClass(this.options.baseClass || 'ws-range').attr({role: 'slider'}).append('<span class="ws-range-min ws-range-progress" /><span class="ws-range-rail ws-range-track"><span class="ws-range-thumb"><span><span data-value="" data-valuetext="" /></span></span></span>');
 			this.trail = $('.ws-range-track', this.element);
 			this.range = $('.ws-range-progress', this.element);
 			this.thumb = $('.ws-range-thumb', this.trail);
@@ -805,10 +805,12 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		},
 		min: function(val){
 			this.options.min = retDefault(val, 0);
+			this.element.attr('aria-valuemin', this.options.min);
 			this.value(this.options.value, true);
 		},
 		max: function(val){
 			this.options.max = retDefault(val, 100);
+			this.element.attr('aria-valuemax', this.options.max);
 			this.value(this.options.value, true);
 		},
 		step: function(val){
@@ -981,8 +983,6 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				if(e.target == window){remove();}
 			};
 			var add = function(e){
-				var outerWidth;
-				
 				if(isActive || (e.type == 'touchstart' && (!e.originalEvent || !e.originalEvent.touches || e.originalEvent.touches.length != 1))){
 					return;
 				}
@@ -997,7 +997,6 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 					leftOffset = that.element.offset();
 					widgetUnits = that.element[that.dirs.innerWidth]();
 					if(!widgetUnits || !leftOffset){return;}
-					outerWidth = that.thumb[that.dirs.outerWidth]();
 					leftOffset = leftOffset[that.dirs.pos];
 					widgetUnits = 100 / widgetUnits;
 
@@ -1114,8 +1113,13 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				webshims.ready('WINDOWLOAD', function(){
 					webshims.ready('dom-support', function(){
 						if ($.fn.onWSOff) {
-							that.element.onWSOff('updateshadowdom', function(){
+							var timer;
+							var update = function(){
 								that.updateMetrics();
+							};
+							that.element.onWSOff('updateshadowdom', function(){
+								clearTimeout(timer);
+								timer = setTimeout(update, 100);
 							});
 						}
 					});
@@ -1126,26 +1130,26 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			}
 		},
 		posCenter: function(elem, outerWidth){
-			var temp;
+			var temp, eS;
+
 			if(this.options.calcCenter && (!this._init || this.element[0].offsetWidth)){
 				if(!elem){
 					elem = this.thumb;
 				}
+				eS = elem[0].style;
 				if(!outerWidth){
 					outerWidth = elem[this.dirs.outerWidth]();
 				}
 				outerWidth = outerWidth / -2;
-				elem.css(this.dirs.marginLeft, outerWidth);
-				
+				eS[this.dirs.marginLeft] = outerWidth +'px';
+
 				if(this.options.calcTrail && elem[0] == this.thumb[0]){
 					temp = this.element[this.dirs.innerHeight]();
-					elem.css(this.dirs.marginTop, (elem[this.dirs.outerHeight]() - temp) / -2);
-					this.range.css(this.dirs.marginTop, (this.range[this.dirs.outerHeight]() - temp) / -2 );
+					eS[this.dirs.marginTop] = ((elem[this.dirs.outerHeight]() - temp) / -2) + 'px';
+					this.range[0].style[this.dirs.marginTop] = ((this.range[this.dirs.outerHeight]() - temp) / -2 ) +'px';
 					outerWidth *= -1;
-					this.trail
-						.css(this.dirs.left, outerWidth)
-						.css(this.dirs.right, outerWidth)
-					;
+					this.trail[0].style[this.dirs.left] = outerWidth +'px';
+					this.trail[0].style[this.dirs.right] = outerWidth +'px';
 				}
 			}
 		},
@@ -1189,7 +1193,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			value: 50, 
 			input: $.noop, 
 			change: $.noop, 
-			_change: $.noop, 
+			_change: $.noop,
 			showLabels: true, 
 			options: {},
 			calcCenter: true,
@@ -1219,7 +1223,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		if(!curCfg[selectName]){
 			var labels = curCfg.date[opts.monthNames] || monthDigits;
 			curCfg[selectName] = ('<option value=""></option>')+$.map(monthDigits, function(val, i){
-				return '<option value="'+val+'"]>'+labels[i]+'</option>';
+				return '<option value="'+val+'">'+labels[i]+'</option>';
 			}).join('');
 		}
 		return curCfg[selectName];
@@ -1623,8 +1627,12 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				var names;
 				var p = val.split('-');
 				if(p[0] && p[1]){
-					names = curCfg.date[options.monthNames] || curCfg.date.monthNames;
-					p[1] = names[(p[1] * 1) - 1];
+
+					if(!options || !options.monthSelect){
+						names = curCfg.date[options.monthNames] || curCfg.date.monthNames;
+						p[1] = names[(p[1] * 1) - 1];
+					}
+
 					if(options && options.splitInput){
 						val = [p[0] || '', p[1] || ''];
 					} else if(p[1]){
@@ -1816,6 +1824,10 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						asValue: function(val){
 							var type = (typeof val == 'object') ? 'valueAsDate' : 'valueAsNumber';
 							return input.prop(type, val).prop('value');
+						},
+						asDate: function(val){
+							var type = (typeof val == 'number') ? 'valueAsNumber' : 'value';
+							return input.prop(type, val).prop('valueAsDate');
 						},
 						isValid: function(val, attrs){
 							if(attrs && (attrs.nodeName || attrs.jquery)){
@@ -2090,6 +2102,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				this.asNumber = helper.asNumber;
 				this.asValue = helper.asValue;
 				this.isValid = helper.isValid;
+				this.asDate = helper.asDate;
 				
 				
 				wsWidgetProto._create.apply(this, arguments);
@@ -2688,53 +2701,75 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			return $.css(this, 'display') != 'none';
 		};
 		var sizeInput = function(data){
-			var init;
+			var init, parent, lastWidth, left, right, isRtl, hasButtons;
+			var oriStyleO = data.orig.style;
+			var styleO = data.element[0].style;
+			if($.support.boxSizing == null && !$.isReady){
+				$(function(){
+					parent = data.orig.parentNode;
+				});
+			} else {
+				parent = data.orig.parentNode;
+			}
 			var updateStyles = function(){
-				$(data.orig).removeClass('ws-important-hide');
-				$.style( data.orig, 'display', '' );
-				var hasButtons, marginR, marginL, left, right, isRtl;
+				var curWidth, marginR, marginL, assignWidth;
 				var correctWidth = 0.8;
-				if(!init || data.orig.offsetWidth){
-					hasButtons = data.buttonWrapper && data.buttonWrapper.filter(isVisible).length;
-					
-					isRtl = hasButtons && data.buttonWrapper.css('direction') == 'rtl';
-					if(isRtl){
-						left = 'Right';
-						right = 'Left';
-					} else {
-						left = 'Left';
-						right = 'Right';
+
+				if(parent){
+					curWidth = parent.offsetWidth;
+				}
+
+				if(!init || (curWidth && curWidth != lastWidth)){
+					lastWidth = curWidth;
+					oriStyleO.display = '';
+					styleO.display = 'none';
+
+					if(!init){
+						hasButtons = data.buttonWrapper && data.buttonWrapper.filter(isVisible).length;
+						isRtl = hasButtons && data.buttonWrapper.css('direction') == 'rtl';
+						if(isRtl){
+							left = 'Right';
+							right = 'Left';
+						} else {
+							left = 'Left';
+							right = 'Right';
+						}
+						if(hasButtons){
+							data.buttonWrapper[isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+						}
 					}
-					
+
 					marginR = $.css( data.orig, 'margin'+right);
-					
-					data.element
-						.css('margin'+left, $.css( data.orig, 'margin'+left))
-						.css('margin'+right, hasButtons ? 0 : marginR)
-					;
+
+					styleO['margin'+left] = $.css( data.orig, 'margin'+left);
+					styleO['margin'+right] = hasButtons ? '0px' : marginR;
+
 					
 					if(hasButtons){
-						data.buttonWrapper[isRtl ? 'addClass' : 'removeClass']('ws-is-rtl');
+
 						marginL = (parseInt(data.buttonWrapper.css('margin'+left), 10) || 0);
-						data.element.css('padding'+right, '');
-						
+						styleO['padding'+right] = '';
+
 						if(marginL < 0){
 							marginR = (parseInt(marginR, 10) || 0) + ((data.buttonWrapper.outerWidth() + marginL) * -1);
-							data.buttonWrapper.css('margin'+right, marginR);
-							data.element
-								.css('padding'+right, '')
-								.css('padding'+right, (parseInt( data.element.css('padding'+right), 10) || 0) + data.buttonWrapper.outerWidth())
-							;
+							data.buttonWrapper[0].style['margin'+right] = marginR+'px';
+
+							styleO['padding'+right] = ((parseInt( data.element.css('padding'+right), 10) || 0) + data.buttonWrapper.outerWidth()) +'px';
+
 						} else {
-							data.buttonWrapper.css('margin'+right, marginR);
+							data.buttonWrapper[0].style['margin'+right] = marginR;
 							correctWidth = data.buttonWrapper.outerWidth(true) + correctWidth;
 						}
 					}
-					
-					data.element.outerWidth( $(data.orig).outerWidth() - correctWidth );
+
+					assignWidth = $(data.orig).outerWidth() - correctWidth;
+
+					styleO.display = '';
+					data.element.outerWidth(assignWidth);
+					oriStyleO.display = 'none';
+					init = true;
 				}
-				init = true;
-				$(data.orig).addClass('ws-important-hide');
+
 			};
 			data.element.onWSOff('updateshadowdom', updateStyles, true);
 		};
@@ -2798,6 +2833,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				cNames = $.prop(this, 'className');
 				if(opts.classes){
 					cNames += ' '+opts.classes;
+					$(this).addClass(opts.classes);
 				}
 				
 				if(opts.splitInput || type == 'range'){
@@ -2870,7 +2906,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				if(opts.calculateWidth){
 					sizeInput(data.shim);
 				} else {
-					$(this).addClass('ws-important-hide');
+					$(this).css('display', 'none');
 				}
 			}
 			
