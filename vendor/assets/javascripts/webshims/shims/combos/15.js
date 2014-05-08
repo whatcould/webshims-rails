@@ -1,3 +1,61 @@
+
+//this might was already extended by ES5 shim feature
+(function($){
+	"use strict";
+	var webshims = window.webshims;
+	if(webshims.defineProperties){return;}
+	var defineProperty = 'defineProperty';
+	var has = Object.prototype.hasOwnProperty;
+	var descProps = ['configurable', 'enumerable', 'writable'];
+	var extendUndefined = function(prop){
+		for(var i = 0; i < 3; i++){
+			if(prop[descProps[i]] === undefined && (descProps[i] !== 'writable' || prop.value !== undefined)){
+				prop[descProps[i]] = true;
+			}
+		}
+	};
+
+	var extendProps = function(props){
+		if(props){
+			for(var i in props){
+				if(has.call(props, i)){
+					extendUndefined(props[i]);
+				}
+			}
+		}
+	};
+
+	if(Object.create){
+		webshims.objectCreate = function(proto, props, opts){
+			extendProps(props);
+			var o = Object.create(proto, props);
+			if(opts){
+				o.options = $.extend(true, {}, o.options  || {}, opts);
+				opts = o.options;
+			}
+			if(o._create && $.isFunction(o._create)){
+				o._create(opts);
+			}
+			return o;
+		};
+	}
+
+	if(Object[defineProperty]){
+		webshims[defineProperty] = function(obj, prop, desc){
+			extendUndefined(desc);
+			return Object[defineProperty](obj, prop, desc);
+		};
+	}
+	if(Object.defineProperties){
+		webshims.defineProperties = function(obj, props){
+			extendProps(props);
+			return Object.defineProperties(obj, props);
+		};
+	}
+	webshims.getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+
+	webshims.getPrototypeOf = Object.getPrototypeOf;
+})(window.webshims.$);
 //DOM-Extension helper
 webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
@@ -633,6 +691,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						this.width = docObserve.getWidth();
 						setInterval(this.test, 999);
 						$(this.test);
+						if($.support.boxSizing == null){
+							$(function(){
+								if($.support.boxSizing){
+									docObserve.handler({type: 'boxsizing'});
+								}
+							});
+						}
 						webshims.ready('WINDOWLOAD', this.test);
 						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
 						$(window).on('resize', this.handler);
@@ -644,13 +709,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			webshims.docObserve = function(){
 				webshims.ready('DOM', function(){
 					docObserve.start();
-					if($.support.boxSizing == null){
-						$(function(){
-							if($.support.boxSizing){
-								docObserve.handler({type: 'boxsizing'});
-							}
-						});
-					}
+
 				});
 			};
 			return function(nativeElem, shadowElem, opts){
@@ -1181,27 +1240,27 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	/*
 	 * Selectors for all browsers
 	 */
-	var rElementsGroup = /^(?:form|fieldset)$/i;
-	var hasInvalid = function(elem){
-		var ret = false;
-		$(elem).jProp('elements').each(function(){
-			if(!rElementsGroup.test(this.nodeName || '')){
-				ret = $(this).is(':invalid');
-				if(ret){
-					return false;
-				}
-			}
-			
-		});
-		return ret;
-	};
 	
 	var extendSels = function(){
 		var matches, matchesOverride;
 		var exp = $.expr[":"];
+		var rElementsGroup = /^(?:form|fieldset)$/i;
+		var hasInvalid = function(elem){
+			var ret = false;
+			$(elem).jProp('elements').each(function(){
+				if(!rElementsGroup.test(this.nodeName || '')){
+					ret = exp.invalid(this);
+					if(ret){
+						return false;
+					}
+				}
+
+			});
+			return ret;
+		};
 		$.extend(exp, {
 			"valid-element": function(elem){
-				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
+				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) : !!($.prop(elem, 'willValidate') && isValid(elem));
 			},
 			"invalid-element": function(elem){
 				return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
@@ -1256,27 +1315,36 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			};
 		}
 	};
-	
-	if($.expr.filters){
-		extendSels();
-	} else {
-		webshims.ready('sizzle', extendSels);
-	}
-	
-	
-	webshims.triggerInlineForm = function(elem, event){
-		$(elem).trigger(event);
+	var formExtras = {
+		noAutoCallback: true,
+		options: options
 	};
-	
+	var addModule = webshims.loader.addModule;
 	var lazyLoadProxy = function(obj, fn, args){
 		lazyLoad();
 		webshims.ready('form-validation', function(){
 			obj[fn].apply(obj, args);
 		});
 	};
-	
+
 	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
 	var poCFG = webshims.cfg.wspopover;
+
+	addModule('form-validation', $.extend({d: ['form-message']}, formExtras));
+
+	addModule('form-validators', $.extend({}, formExtras));
+	
+	if($.expr.filters){
+		extendSels();
+	} else {
+		webshims.ready('sizzle', extendSels);
+	}
+
+	webshims.triggerInlineForm = function(elem, event){
+		$(elem).trigger(event);
+	};
+	
+
 	if(!poCFG.position && poCFG.position !== false){
 		poCFG.position = {
 			at: 'left bottom',
@@ -1398,7 +1466,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 	webshims.ready('WINDOWLOAD', lazyLoad);
 
-	if(modules['form-number-date-ui'].loaded && modules['form-number-date-api'].test()){
+	if(modules['form-number-date-ui'].loaded && !options.customMessages && (modules['form-number-date-api'].test() || (Modernizr.inputtypes.range && Modernizr.inputtypes.color))){
 		webshims.isReady('form-number-date-ui', true);
 	}
 });
@@ -1434,8 +1502,8 @@ var isNumber = function(string){
 			(function(){
 				var find = $.find;
 				var matchesSelector = $.find.matchesSelector;
-				
-				var regExp = /(\:valid|\:invalid|\:optional|\:required|\:in-range|\:out-of-range)(?=[\s\[\~\.\+\>\:\#*]|$)/ig;
+
+				var regExp = /(\:valid|\:invalid|\:optional|\:required)(?=[\s\[\~\.\+\>\:\#*]|$)/ig;
 				var regFn = function(sel){
 					return sel + '-element';
 				};
@@ -1796,14 +1864,13 @@ var rsubmittable = /^(?:select|textarea|input)/i;
 				if(validityState){
 					return validityState;
 				}
-				validityState 	= $.extend({}, validityPrototype);
+				validityState = $.extend({}, validityPrototype);
 				
 				if( !$.prop(elem, 'willValidate') || elem.type == 'submit' ){
 					return validityState;
 				}
-				var val 	= jElm.val(),
-					cache 	= {nodeName: elem.nodeName.toLowerCase()}
-				;
+				var val = jElm.val();
+				var cache = {nodeName: elem.nodeName.toLowerCase()};
 				
 				validityState.customError = !!(webshims.data(elem, 'customvalidationMessage'));
 				if( validityState.customError ){
@@ -1830,7 +1897,7 @@ var rsubmittable = /^(?:select|textarea|input)/i;
 				baseCheckValidity.unhandledInvalids = false;
 				return baseCheckValidity($(this).getNativeElement()[0], name);
 			}
-		}
+		};
 	});
 	
 	webshims.defineNodeNameProperties(nodeName, inputValidationAPI, 'prop');
@@ -1841,7 +1908,7 @@ webshims.defineNodeNamesBooleanProperty(['input', 'textarea', 'select'], 'requir
 	set: function(value){
 		$(this).getShadowFocusElement().attr('aria-required', !!(value)+'');
 	},
-	initAttr: Modernizr.localstorage //only if we have aria-support
+	initAttr: true
 });
 webshims.defineNodeNamesBooleanProperty(['input'], 'multiple');
 
@@ -2008,7 +2075,7 @@ webshims.addReady(function(context, contextElem){
 	
 	try {
 		if(context == document && !('form' in (document.activeElement || {}))) {
-			focusElem = $('input[autofocus], select[autofocus], textarea[autofocus]', context).eq(0).getShadowFocusElement()[0];
+			focusElem = $(context.querySelector('input[autofocus], select[autofocus], textarea[autofocus]')).eq(0).getShadowFocusElement()[0];
 			if (focusElem && focusElem.offsetHeight && focusElem.offsetWidth) {
 				focusElem.focus();
 			}
@@ -2029,7 +2096,7 @@ if(!Modernizr.input.list){
 				if(select[0]){
 					options = $.makeArray(select[0].options || []);
 				} else {
-					options = $('option', elem).get();
+					options = elem.getElementsByTagName('option');
 					if(options.length){
 						webshims.warn('you should wrap your option-elements for a datalist in a select element to support IE and other old browsers.');
 					}
@@ -2324,26 +2391,103 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 		min: 1,
 		max: 1
 	};
+	var toLocale = (function(){
+		var monthFormatter;
+		var transforms = {
+			number: function(val){
+				var num = val * 1;
+				if(num.toLocaleString && !isNaN(num)){
+					val = num.toLocaleString() || val;
+				}
+				return val;
+			}
+		};
+		var _toLocale = function(val, elem, attr){
+			var type, widget;
+			if(valueVals[attr]){
+				type = $.prop(elem, 'type');
+				widget = $(elem).getShadowElement().data('wsWidget'+ type );
+				if(widget && widget.formatValue){
+					val = widget.formatValue(val, false);
+				} else if(transforms[type]){
+					val = transforms[type](val);
+				}
+			}
+			return val;
+		};
+
+		[{n: 'date', f: 'toLocaleDateString'}, {n: 'time', f: 'toLocaleTimeString'}, {n: 'datetime-local', f: 'toLocaleString'}].forEach(function(desc){
+			transforms[desc.n] = function(val){
+				var date = new Date(val);
+				if(date && date[desc.f]){
+					val = date[desc.f]() || val;
+				}
+				return val;
+			};
+		});
+
+		if(window.Intl && Intl.DateTimeFormat){
+			monthFormatter = new Intl.DateTimeFormat(navigator.browserLanguage || navigator.language, {year: "numeric", month: "2-digit"}).format(new Date());
+			if(monthFormatter && monthFormatter.format){
+				transforms.month = function(val){
+					var date = new Date(val);
+					if(date){
+						val = monthFormatter.format(date) || val;
+					}
+					return val;
+				};
+			}
+		}
+
+		webshims.format =  {};
+
+		['date', 'number', 'month', 'time', 'datetime-local'].forEach(function(name){
+			webshims.format[name] = function(val, opts){
+				if(opts && opts.nodeType){
+					return _toLocale(val, opts, name);
+				}
+				if(name == 'number' && opts && opts.toFixed ){
+					val = (val * 1);
+					if(!opts.fixOnlyFloat || val % 1){
+						val = val.toFixed(opts.toFixed);
+					}
+				}
+				if(webshims._format && webshims._format[name]){
+					return webshims._format[name](val, opts);
+				}
+				return transforms[name](val);
+			};
+		});
+
+		return _toLocale;
+	})();
 
 	webshims.replaceValidationplaceholder = function(elem, message, name){
-		var type, widget;
+		var val = $.prop(elem, 'title');
+		if(message){
+			if(name == 'patternMismatch' && !val){
+				webshims.error('no title for patternMismatch provided. Always add a title attribute.');
+			}
+			if(val){
+				val = '<span class="ws-titlevalue">'+ val.replace(lReg, '&lt;').replace(gReg, '&gt;') +'</span>';
+			}
+
+			if(message.indexOf('{%title}') != -1){
+				message = message.replace('{%title}', val);
+			} else if(val) {
+				message = message+' '+val;
+			}
+		}
+
 		if(message && message.indexOf('{%') != -1){
-			['value', 'min', 'max', 'title', 'maxlength', 'minlength', 'label'].forEach(function(attr){
+			['value', 'min', 'max', 'maxlength', 'minlength', 'label'].forEach(function(attr){
 				if(message.indexOf('{%'+attr) === -1){return;}
 				var val = ((attr == 'label') ? $.trim($('label[for="'+ elem.id +'"]', elem.form).text()).replace(/\*$|:$/, '') : $.prop(elem, attr)) || '';
 				val = ''+val;
-				if(name == 'patternMismatch' && attr == 'title' && !val){
-					webshims.error('no title for patternMismatch provided. Always add a title attribute.');
-				}
 
-				if(valueVals[attr]){
-					if(!widget){
-						widget = $(elem).getShadowElement().data('wsWidget'+ (type = $.prop(elem, 'type')));
-					}
-					if(widget && widget.formatValue){
-						val = widget.formatValue(val, false);
-					}
-				}
+
+				val = toLocale(val, elem, attr);
+
 				message = message.replace('{%'+ attr +'}', val.replace(lReg, '&lt;').replace(gReg, '&gt;'));
 				if('value' == attr){
 					message = message.replace('{%valueLen}', val.length);
@@ -2432,7 +2576,6 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 });
 ;webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
 	"use strict";
-	var doc = document;
 	var lazyLoad = function(name){
 		if(!name || typeof name != 'string'){
 			name = 'DOM';

@@ -1,15 +1,16 @@
 webshims.register('form-validators', function($, webshims, window, document, undefined, options){
 "use strict";
-
+var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 (function(){
 	if(webshims.refreshCustomValidityRules){
 		webshims.error("form-validators already included. please remove custom-validity.js");
 	}
-	
+
 	var customValidityRules = {};
 	var formReady = false;
 	var blockCustom;
 	var initTest;
+	var elemSels = 'input, select, textarea, fieldset[data-dependent-validation]';
 	var onEventTest = function(e){
 		webshims.refreshCustomValidityRules(e.target);
 	};
@@ -25,21 +26,28 @@ webshims.register('form-validators', function($, webshims, window, document, und
 	};
 	
 	webshims.customErrorMessages = {};
-	webshims.addCustomValidityRule = function(name, test, defaultMessage){
-		customValidityRules[name] = test;
-		if(!webshims.customErrorMessages[name]){
-			webshims.customErrorMessages[name] = [];
-			webshims.customErrorMessages[name][''] = defaultMessage || name;
-		}
-		if(formReady){
-			$('input, select, textarea, fieldset[data-dependent-validation]')
+	webshims.addCustomValidityRule = (function(){
+		var timer;
+		var reTest = function(){
+			$(document.querySelectorAll(elemSels))
 				.filter(noValidate)
 				.each(function(){
 					testValidityRules(this);
 				})
 			;
-		}
-	};
+		};
+		return function(name, test, defaultMessage){
+			customValidityRules[name] = test;
+			if(!webshims.customErrorMessages[name]){
+				webshims.customErrorMessages[name] = [];
+				webshims.customErrorMessages[name][''] = defaultMessage || name;
+			}
+			if(formReady){
+				clearTimeout(timer);
+				timer = setTimeout(reTest);
+			}
+		};
+	})();
 	webshims.refreshCustomValidityRules = function(elem){
 		if(!initTest){return;}
 		var val, setMessage;
@@ -100,7 +108,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 				var activeElement = document.activeElement;
 
 				if(activeElement != e.target && $.data(activeElement, 'webshimsswitchvalidityclass')){
-					$(activeElement).trigger('refreshvalidityui');
+					$(activeElement).trigger('updatevalidation.webshims');
 				}
 			}
 		});
@@ -116,12 +124,11 @@ webshims.register('form-validators', function($, webshims, window, document, und
 				return null;
 			}
 		};
-		
-		
+
 		setTimeout(function(){
 			webshims.addReady(function(context, selfElement){
 				initTest = true;
-				$('input, select, textarea, fieldset[data-dependent-validation]', context).add(selfElement.filter('input, select, textarea, fieldset[data-dependent-validation]'))
+				$(context.querySelectorAll(elemSels)).add(selfElement.filter(elemSels))
 					.filter(noValidate)
 					.each(function(){
 						testValidityRules(this);
@@ -131,7 +138,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 				formReady = true;
 			});
 			$(document).on('refreshCustomValidityRules', onEventTest);
-		}, 9);
+		}, 29);
 		
 	});
 	
@@ -163,7 +170,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 		if(!val || !data.minlength){return;}
 
 		if($.nodeName(elem, 'input')){
-			webshims.warn('depreacated data-minlength usage: Use pattern=".{'+ data.minlength +'3,}" instead.');
+			webshims.warn('depreacated data-minlength usage: Use pattern=".{'+ data.minlength +',}" instead.');
 		}
 		return data.minlength > val.length;
 	}, 'Entered value is too short.');
@@ -238,7 +245,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 			}
 			$.prop( elem, data.prop, val);
 			if(e){
-				$(elem).getShadowElement().filter('.user-error, .user-success').trigger('refreshvalidityui');
+				$(elem).getShadowElement().filter(iValClasses).trigger('updatevalidation.webshims');
 			}
 		};
 		
@@ -279,8 +286,8 @@ webshims.register('form-validators', function($, webshims, window, document, und
 					webshims.refreshCustomValidityRules(elem);
 					$(elem)
 						.getShadowElement()
-						.filter('.user-error, .user-success')
-						.trigger('refreshvalidityui')
+						.filter(iValClasses)
+						.trigger('updatevalidation.webshims')
 					;
 				});
 			}
@@ -307,6 +314,7 @@ webshims.register('form-validators', function($, webshims, window, document, und
 			if(!val || !data.ajaxvalidate){return;}
 			var opts;
 			if(!data.remoteValidate){
+				webshims.loader.loadList(['jajax']);
 				if(typeof data.ajaxvalidate == 'string'){
 					data.ajaxvalidate = {url: data.ajaxvalidate, depends: $([])};
 				} else {
@@ -334,15 +342,15 @@ webshims.register('form-validators', function($, webshims, window, document, und
 							this.restartAjax = false;
 							this.ajaxLoading = true;
 							$.ajax(
-								$.extend({}, opts, {
+								$.extend({dataType: 'json'}, opts, {
 									url: opts.url,
-									dataType: 'json',
 									depData: remoteData,
 									data: formCFG.fullRemoteForm || opts.fullForm ?
 										$(elem).jProp('form').serializeArray() :
 										remoteData,
 									success: this.getResponse,
-									complete: this._complete
+									complete: this._complete,
+									timeout: 3000
 								})
 							);
 						}
@@ -355,16 +363,21 @@ webshims.register('form-validators', function($, webshims, window, document, und
 						remoteValidate.restartAjax = false;
 					},
 					getResponse: function(data){
+						if(options.transformAjaxValidate){
+							data = options.transformAjaxValidate(data);
+						}
 						if(!data){
 							data = {message: '', valid: true};
 						} else if(typeof data == 'string'){
-							data = JSON.parse(data);
+							try {
+								data = JSON.parse(data);
+							} catch (er){}
 						}
 						
 						remoteValidate.message = ('message' in data) ? data.message : !data.valid;
 						remoteValidate.lastMessage = remoteValidate.message;
 						remoteValidate.blockUpdate = true;
-						$(elem).triggerHandler('refreshvalidityui');
+						$(elem).triggerHandler('updatevalidation.webshims');
 						remoteValidate.message = 'async';
 						remoteValidate.blockUpdate = false;
 					},

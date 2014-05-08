@@ -207,6 +207,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 	options.addZero = addZero;
 	webshims.loader.addModule('forms-picker', {
 		noAutoCallback: true,
+		css: 'styles/forms-picker.css',
 		options: options
 	});
 	webshims.loader.addModule('color-picker', {
@@ -379,8 +380,40 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		
 		var formatVal = {
-			number: function(val, o){
-				return (val+'').replace(/\,/g, '').replace(/\./, curCfg.numberFormat['.']);
+			number: function(val, o, noCorrect){
+				var parts, len, i, isNegative;
+				if(o && o.nogrouping){
+					return (val+'').replace(/\,/g, '').replace(/\./, curCfg.numberFormat['.']);
+				}
+
+				val += '';
+
+				if(val.charAt(0) == '-'){
+					isNegative = true;
+					val = val.replace('-', '');
+				}
+				parts = val.split('.');
+				len = parts[0].length;
+				i = len - 1;
+
+				val = "";
+				while(i >= 0) {
+					val = parts[0].charAt(i) + val;
+					if (i > 0 && (len - i) % 3 === 0) {
+						val = curCfg.numberFormat[','] + val;
+					}
+					--i;
+				}
+				if(parts[1] != null){
+					if(!noCorrect){
+						parts[1] = parts[1].replace(/\-/g, '0');
+					}
+					val += curCfg.numberFormat['.'] + parts[1];
+				}
+				if(isNegative){
+					val = '-'+val;
+				}
+				return val;
 			},
 			time: function(val){
 				var fVal;
@@ -459,10 +492,10 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				return ret;
 			}
 		};
-		
+
 		var parseVal = {
 			number: function(val){
-				return (val+'').replace(curCfg.numberFormat[','], '').replace(curCfg.numberFormat['.'], '.');
+				return (val+'').split(curCfg.numberFormat[',']).join('').replace(curCfg.numberFormat['.'], '.');
 			},
 //			week: function(val){
 //				return val;
@@ -531,7 +564,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					val = val.split(curCfg.dFormat);
 				}
 				if(val.length == 3 && val[0] && val[1] && val[2] && (!noCorrect || (val[obj.yy].length > 3 && val[obj.mm].length == 2 && val[obj.dd].length == 2))){
-					if(val[obj.mm] > 12 && val[obj.dd] < 13){
+					if(!opts.noDayMonthSwitch && val[obj.mm] > 12 && val[obj.dd] < 13){
 						tmp = val[obj.dd];
 						val[obj.dd] = val[obj.mm];
 						val[obj.mm] = tmp;
@@ -964,7 +997,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			},
 			toFixed: function(val, force){
 				var o = this.options;
-				if(o.toFixed && o.type == 'number' && val && this.valueAsNumber && (force || !this.element.is(':focus')) && (!o.fixOnlyFloat || (this.valueAsNumber % 1)) && !$(this.orig).is(':invalid')){
+				if(o.toFixed && o.type == 'number' && val && !isNaN(this.valueAsNumber) && (force || !this.element.is(':focus')) && (!o.fixOnlyFloat || (this.valueAsNumber % 1))){
 					val = formatVal[this.type](this.valueAsNumber.toFixed(o.toFixed), this.options);
 				}
 				return val;
@@ -973,7 +1006,8 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		['defaultValue', 'value'].forEach(function(name){
 			var isValue = name == 'value';
-			spinBtnProto[name] = function(val, force){
+			spinBtnProto[name] = function(val, force, isLive){
+				var selectionEnd;
 				if(!this._init || force || this.options[name] !== val){
 					if(isValue){
 						this._beforeValue(val);
@@ -992,7 +1026,14 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 							}
 						});
 					} else {
-						this.element.prop(name, this.toFixed(val));
+						val = this.toFixed(val);
+						if(isLive && this._getSelectionEnd){
+							selectionEnd = this._getSelectionEnd(val);
+						}
+						this.element.prop(name, val);
+						if(selectionEnd){
+							this.element.prop('selectionEnd', selectionEnd);
+						}
 					}
 					this._propertyChange(name);
 					this.mirrorValidity();
@@ -1020,7 +1061,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		$.fn.wsBaseWidget = function(opts){
 			opts = $.extend({}, opts);
 			return this.each(function(){
-				$.webshims.objectCreate(wsWidgetProto, {
+				webshims.objectCreate(wsWidgetProto, {
 					element: {
 						value: $(this)
 					}
@@ -1035,7 +1076,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				monthNames: 'monthNamesShort'
 			}, opts);
 			return this.each(function(){
-				$.webshims.objectCreate(spinBtnProto, {
+				webshims.objectCreate(spinBtnProto, {
 					element: {
 						value: $(this)
 					}
@@ -1044,12 +1085,80 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		};
 		
 		$.fn.spinbtnUI.wsProto = spinBtnProto;
+
+		webshims._format = formatVal;
 		
 	})();
-	
+
+
+	$.fn.wsTouchClick = (function(){
+		var supportsTouchaction = ('touchAction' in document.documentElement.style);
+		var addTouch = !supportsTouchaction && ('ontouchstart' in window) && document.addEventListener;
+		return function(target, handler){
+			var touchData, touchEnd, touchStart;
+
+			if(addTouch){
+
+				touchEnd = function(e){
+					var ret, touch;
+					e = e.originalEvent || {};
+					$(this).off('touchend', touchEnd);
+					var changedTouches = e.changedTouches || e.touches;
+					if(!touchData || !changedTouches || changedTouches.length != 1){
+						return;
+					}
+
+					touch = changedTouches[0];
+					if(Math.abs(touchData.x - touch.pageX) > 40 || Math.abs(touchData.y - touch.pageY) > 40 || Date.now() - touchData.now > 600){
+						return;
+					}
+					e.preventDefault();
+					ret = handler.apply(this, arguments);
+
+					return ret;
+				};
+
+				touchStart = function(e){
+					var touch, elemTarget;
+
+
+					if((!e || e.touches.length != 1)){
+						return;
+					}
+					touch = e.touches[0];
+					elemTarget = target ? $(touch.target).closest(target) : $(this);
+					if(!elemTarget.length){
+						return;
+					}
+					touchData = {
+						x: touch.pageX,
+						y: touch.pageY,
+						now: Date.now()
+					};
+					elemTarget.on('touchend', touchEnd);
+				};
+
+				this.each(function(){
+					this.addEventListener('touchstart', touchStart, true);
+				});
+			} else if(supportsTouchaction){
+				this.css('touch-action', 'manipulation');
+			}
+
+			if($.isFunction(target)){
+				handler = target;
+				target = false;
+				this.on('click', handler);
+			} else {
+				this.on('click', target, handler);
+			}
+			return this;
+		};
+	})();
+
 	(function(){
 		var picker = {};
-
+		var assumeVirtualKeyBoard = Modernizr.touchevents || Modernizr.touch || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
 		webshims.inlinePopover = {
 			_create: function(){
 				this.element = $('<div class="ws-inline-picker"><div class="ws-po-box" /></div>').data('wspopover', this);
@@ -1140,7 +1249,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			cancel: function(val, popover, data){
 				if(!data.options.inlinePicker){
 					popover.stopOpen = true;
-					data.element.getShadowFocusElement().trigger('focus');
+					if(assumeVirtualKeyBoard){
+						$('button', data.buttonWrapper).trigger('focus');
+					} else {
+						data.element.getShadowFocusElement().trigger('focus');
+					}
 					setTimeout(function(){
 						popover.stopOpen = false;
 					}, 9);
@@ -1231,6 +1344,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 		
 		
 		picker._common = function(data){
+			if(data.options.nopicker){return;}
 			var options = data.options;
 			var popover = webshims.objectCreate(options.inlinePicker ? webshims.inlinePopover : webshims.wsPopover, {}, $.extend(options.popover || {}, {prepareFor: options.inlinePicker ? data.buttonWrapper : data.element}));
 			var opener = $('<button type="button" class="ws-popover-opener"><span /></button>').appendTo(data.buttonWrapper);
@@ -1300,7 +1414,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			}
 			
 			
-			opener.on({click: open});
+			opener.wsTouchClick(open);
 			
 			if(options.inlinePicker){
 				popover.openedByFocus = true;
@@ -1493,7 +1607,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			var init, parent, lastWidth, left, right, isRtl, hasButtons;
 			var oriStyleO = data.orig.style;
 			var styleO = data.element[0].style;
-			if($.support.boxSizing == null && !$.isReady){
+			if($.support.boxSizing == null){
 				$(function(){
 					parent = data.orig.parentNode;
 				});

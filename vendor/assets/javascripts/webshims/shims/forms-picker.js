@@ -372,9 +372,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 						if (events[name] && events[name].val != val) {
 							clearTimeout(events[name].timer);
 							events[name].val = val;
-							events[name].timer = setTimeout(function(){
-								events[name].fn(val, that);
-							}, 9);
+							events[name].fn(val, that);
 						}
 					}
 				};
@@ -394,7 +392,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 					return true;
 				}
 			};
-			var callSplitChange = (function(){
+			(function(){
 				var timer;
 				
 				var call = function(e){
@@ -411,13 +409,14 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 					}
 				};
 				
-				var onFocus = function(){
+				var onFocus = function(e){
 					clearTimeout(timer);
+					$(e.target).trigger('wswidgetfocusin');
 				};
 				var onBlur = function(e){
 					clearTimeout(timer);
 					timer = setTimeout(call, 0);
-					
+					$(e.target).trigger('wswidgetfocusout');
 					if (e.type == 'ws__change') {
 						stopPropagation(e);
 						if (!o.splitInput) {
@@ -480,16 +479,18 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				},
 				ws__input: (this.type == 'color' && this.isValid) ? $.noop : (function(){
 					var timer;
+					var delay = that.type == 'number' && !o.nogrouping ? 99 : 199;
 					var check = function(){
 						var val = that.parseValue(true);
 						if (val && that.isValid(val)) {
-							that.setInput(val);
+							that.setInput(val, true);
 						}
 						
 					};
+
 					return function(){
 						clearTimeout(timer);
-						timer = setTimeout(check, 200);
+						timer = setTimeout(check, delay);
 					};
 				})(),
 				'ws__input keydown keypress': (function(){
@@ -566,8 +567,8 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			
 			this.buttonWrapper.on('mousedown', mouseDownInit);
 			
-			this.setInput = function(value){
-				that.value(value);
+			this.setInput = function(value, isLive){
+				that.value(value, false, isLive);
 				eventTimer.call('input', value);
 			};
 			this.setChange = function(value){
@@ -649,12 +650,31 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 						role: 'spinbutton'
 					}).on(spinEvents);
 				}
-				$(this.buttonWrapper).on('mousepressstart mousepressend', '.step-up, .step-down', mousePress).on('mousedown mousepress', '.step-up', function(e){
-					step.stepUp();
-				}).on('mousedown mousepress', '.step-down', function(e){
-					step.stepDown();
-				});
+				$(this.buttonWrapper)
+					.on('mousepressstart mousepressend', '.step-up, .step-down', mousePress)
+					.on('mousedown mousepress', '.step-up', function(e){
+						step.stepUp();
+					})
+					.on('mousedown mousepress', '.step-down', function(e){
+						step.stepDown();
+					})
+				;
 				initChangeEvents();
+			}
+		},
+		_getSelectionEnd: function(val){
+			var oldVal, selectionEnd;
+			if((oldVal = this.element[0].value) && this.element.is(':focus') && (selectionEnd = this.element.prop('selectionEnd')) < oldVal.length){
+				if(this.type == 'number'){
+					oldVal = oldVal.substr(0, selectionEnd).split(curCfg.numberFormat[',']);
+					val = val.substr(0, selectionEnd).split(curCfg.numberFormat[',']);
+					if(oldVal.length < val.length){
+						selectionEnd++;
+					} else if(oldVal.length > val.length){
+						selectionEnd--;
+					}
+				}
+				return selectionEnd;
 			}
 		},
 		initDataList: function(){
@@ -933,6 +953,14 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		var str = '';
 		var rowNum = 0;
 		var triggerValueValidation = (data.orig && ('valuevalidation' in $.data(data.orig)));
+
+		if(!data.options.useDecadeBase){
+			if(!max[0] && min[0]){
+				data.options.useDecadeBase = 'min';
+			} else if(max[0] && !min[0]){
+				data.options.useDecadeBase = 'max';
+			}
+		}
 		
 		if(data.options.useDecadeBase == 'max' && max[0]){
 			xthCorrect = 11 - (max[0] % 12);
@@ -1600,9 +1628,9 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		popover.bodyElement = $('div.ws-picker-body', popover.contentElement);
 		popover.buttonRow = $('div.ws-button-row', popover.contentElement);
 		popover.element.on('updatepickercontent', updateContent);
-		
+
 		popover.contentElement
-			.on('click', 'button[data-action]', actionfn)
+			.wsTouchClick('button[data-action]', actionfn)
 			.on('change', 'select[data-action]', actionfn)
 		;
 		

@@ -29,11 +29,13 @@ video {
   overflow: hidden; }
 
 video,
-audio[controls],
-audio.webshims-controls {
+audio[controls] {
   display: inline-block;
   min-height: 45px;
   min-width: 40px; }
+
+audio[controls] {
+  width: 300px; }
 
 video > *,
 audio > * {
@@ -397,6 +399,8 @@ input[data-wslist]::-webkit-calendar-picker-indicator {
 .validity-alert {
   display: inline-block;
   z-index: 1000000000; }
+  .validity-alert .ws-titlevalue {
+    display: block; }
 
 .ws-errorbox {
   display: none;

@@ -150,12 +150,8 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 	"use strict";
 	var mediaelement = webshims.mediaelement;
 	var id = new Date().getTime();
-	var ADDBACK = $.fn.addBack ? 'addBack' : 'andSelf';
 	//descriptions are not really shown, but they are inserted into the dom
 	var showTracks = {subtitles: 1, captions: 1, descriptions: 1};
-	var notImplemented = function(){
-		webshims.error('not implemented yet');
-	};
 	var dummyTrack = $('<track />');
 	var supportTrackMod = Modernizr.ES5 && Modernizr.objectAccessor;
 	var createEventTarget = function(obj){
@@ -257,9 +253,7 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 	};
 	var copyProps = ['kind', 'label', 'srclang'];
 	var copyName = {srclang: 'language'};
-	
-	var owns = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
-	
+
 	var updateMediaTrackList = function(baseData, trackList){
 		var removed = [];
 		var added = [];
@@ -362,60 +356,44 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 		};
 	})();
 	var emptyDiv = $('<div />')[0];
+
 	function VTTCue(startTime, endTime, text){
 		if(arguments.length != 3){
 			webshims.error("wrong arguments.length for VTTCue.constructor");
 		}
-		
+
 		this.startTime = startTime;
 		this.endTime = endTime;
 		this.text = text;
-		
-		
-		createEventTarget(this);
-	}
-	
-	VTTCue.prototype = {
-		
-		onenter: null,
-		onexit: null,
-		pauseOnExit: false,
-		getCueAsHTML: function(){
+		this.onenter = null;
+		this.onexit = null;
+		this.pauseOnExit = false;
+		this.track = null;
+		this.id = null;
+		this.getCueAsHTML = (function(){
 			var lastText = "";
 			var parsedText = "";
-			var fragment = document.createDocumentFragment();
-			var fn;
-			if(!owns(this, 'getCueAsHTML')){
-				fn = this.getCueAsHTML = function(){
-					var i, len;
-					if(lastText != this.text){
-						lastText = this.text;
-						parsedText = mediaelement.parseCueTextToHTML(lastText);
-						emptyDiv.innerHTML = parsedText;
-						
-						for(i = 0, len = emptyDiv.childNodes.length; i < len; i++){
-							fragment.appendChild(emptyDiv.childNodes[i].cloneNode(true));
-						}
+			var fragment;
+
+			return function(){
+				var i, len;
+				if(!fragment){
+					fragment = document.createDocumentFragment();
+				}
+				if(lastText != this.text){
+					lastText = this.text;
+					parsedText = mediaelement.parseCueTextToHTML(lastText);
+					emptyDiv.innerHTML = parsedText;
+
+					for(i = 0, len = emptyDiv.childNodes.length; i < len; i++){
+						fragment.appendChild(emptyDiv.childNodes[i].cloneNode(true));
 					}
-					return fragment.cloneNode(true);
-				};
-				
-			}
-			return fn ? fn.apply(this, arguments) : fragment.cloneNode(true);
-		},
-		track: null,
-		
-		
-		id: ''
-		//todo-->
-//			,
-//			snapToLines: true,
-//			line: 'auto',
-//			size: 100,
-//			position: 50,
-//			vertical: '',
-//			align: 'middle'
-	};
+				}
+				return fragment.cloneNode(true);
+			};
+
+		})();
+	}
 	
 	window.VTTCue = VTTCue;
 	window.TextTrackCue = function(){
@@ -466,14 +444,15 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 	})();
 	
 	mediaelement.loadTextTrack = function(mediaelem, track, trackData, _default){
-		var loadEvents = 'play playing updatetrackdisplay';
+		var loadEvents = 'play playing';
 		var obj = trackData.track;
 		var load = function(){
 			var error, ajax, createAjax;
-
 			var src = obj.mode != 'disabled' && ($.attr(track, 'src') && $.prop(track, 'src'));
+
 			if(src){
-				$(mediaelem).off(loadEvents, load);
+				$(mediaelem).off(loadEvents, load).off('updatetrackdisplay', load);
+
 				if(!trackData.readyState){
 					error = function(){
 						trackData.readyState = 3;
@@ -507,7 +486,7 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 								error: error
 							});
 						};
-						if($.ajax){
+						if($.ajax && $.ajaxSettings.xhr){
 							createAjax();
 						} else {
 							webshims.ready('jajax', createAjax);
@@ -525,11 +504,15 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 		obj._shimActiveCues = null;
 		obj.activeCues = null;
 		obj.cues = null;
-		$(mediaelem).off(loadEvents, load);
+
 		$(mediaelem).on(loadEvents, load);
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
-			load();
+			webshims.ready('WINDOWLOAD', load);
+		} else {
+			webshims.ready('WINDOWLOAD', function(){
+				$(mediaelem).on('updatetrackdisplay', load);
+			});
 		}
 	};
 	
@@ -558,7 +541,6 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 			
 			
 			if(track.nodeName){
-				
 				if(supportTrackMod){
 					copyProps.forEach(function(copyProp){
 						webshims.defineProperty(obj, copyName[copyProp] || copyProp, {
@@ -593,8 +575,8 @@ webshims.register('details', function($, webshims, window, doc, undefined, optio
 		
 		return obj;
 	};
-	
-	
+
+
 /*
 taken from:
 Captionator 0.5.1 [CaptionCrunch]
@@ -611,7 +593,7 @@ modified for webshims
 		var WebVTTDEFAULTSCueParser		= /^(DEFAULTS|DEFAULT)\s+\-\-\>\s+(.*)/g;
 		var WebVTTSTYLECueParser		= /^(STYLE|STYLES)\s+\-\-\>\s*\n([\s\S]*)/g;
 		var WebVTTCOMMENTCueParser		= /^(COMMENT|COMMENTS)\s+\-\-\>\s+(.*)/g;
-		
+
 		return function(subtitleElement,objectCount){
 
 			var subtitleParts, timeIn, timeOut, html, timeData, subtitlePartIndex, id, specialCueData;
@@ -627,33 +609,33 @@ modified for webshims
 			} else if ((specialCueData = WebVTTCOMMENTCueParser.exec(subtitleElement))) {
 				return null; // At this stage, we don't want to do anything with these.
 			}
-			
+
 			subtitleParts = subtitleElement.split(/\n/g);
-		
+
 			// Trim off any blank lines (logically, should only be max. one, but loop to be sure)
 			while (!subtitleParts[0].replace(/\s+/ig,"").length && subtitleParts.length > 0) {
 				subtitleParts.shift();
 			}
-		
+
 			if (subtitleParts[0].match(/^\s*[a-z0-9-\_]+\s*$/ig)) {
 				// The identifier becomes the cue ID (when *we* load the cues from file. Programatically created cues can have an ID of whatever.)
 				id = String(subtitleParts.shift().replace(/\s*/ig,""));
 			}
-		
+
 			for (subtitlePartIndex = 0; subtitlePartIndex < subtitleParts.length; subtitlePartIndex ++) {
 				var timestamp = subtitleParts[subtitlePartIndex];
-				
+
 				if ((timestampMatch = WebVTTTimestampParser.exec(timestamp))) {
-					
+
 					// WebVTT
-					
+
 					timeData = timestampMatch.slice(1);
-					
+
 					timeIn =	parseInt((timeData[0]||0) * 60 * 60,10) +	// Hours
 								parseInt((timeData[1]||0) * 60,10) +		// Minutes
 								parseInt((timeData[2]||0),10) +				// Seconds
 								parseFloat("0." + (timeData[3]||0));		// MS
-					
+
 					timeOut =	parseInt((timeData[4]||0) * 60 * 60,10) +	// Hours
 								parseInt((timeData[5]||0) * 60,10) +		// Minutes
 								parseInt((timeData[6]||0),10) +				// Seconds
@@ -664,7 +646,7 @@ modified for webshims
 					}
 */
 				}
-				
+
 				// We've got the timestamp - return all the other unmatched lines as the raw subtitle data
 				subtitleParts = subtitleParts.slice(0,subtitlePartIndex).concat(subtitleParts.slice(subtitlePartIndex+1));
 				break;
@@ -683,7 +665,7 @@ modified for webshims
 						previous[current.split(":")[0]] = current.split(":")[1];
 						return previous;
 					},{});
-			
+
 			// Loop through cue settings, replace defaults with cue specific settings if they exist
 			compositeCueSettings =
 				cueSettings
@@ -694,7 +676,7 @@ modified for webshims
 						previous[current.split(":")[0]] = current.split(":")[1];
 						return previous;
 					},compositeCueSettings);
-			
+
 			// Turn back into string like the VTTCue constructor expects
 			cueSettings = "";
 			for (var key in compositeCueSettings) {
@@ -713,18 +695,18 @@ modified for webshims
 			return tmpCue;
 		};
 	})();
-	
+
 	mediaelement.parseCaptions = function(captionData, track, complete) {
 
 		var cue, lazyProcess, regWevVTT, startDate, isWEBVTT;
 
 		mediaelement.createCueList();
 		if (captionData) {
-			
+
 			regWevVTT = /^WEBVTT(\s*FILE)?/ig;
-			
+
 			lazyProcess = function(i, len){
-				
+
 				for(; i < len; i++){
 					cue = captionData[i];
 					if(regWevVTT.test(cue)){
@@ -746,7 +728,7 @@ modified for webshims
 							startDate = new Date().getTime();
 							lazyProcess(i, len);
 						}, 90);
-						
+
 						break;
 					}
 				}
@@ -757,9 +739,9 @@ modified for webshims
 					complete(track.cues);
 				}
 			};
-			
+
 			captionData = captionData.replace(/\r\n/g,"\n");
-			
+
 			setTimeout(function(){
 				captionData = captionData.replace(/\r/g,"\n");
 				setTimeout(function(){
@@ -768,12 +750,12 @@ modified for webshims
 					lazyProcess(0, captionData.length);
 				}, 9);
 			}, 9);
-			
+
 		} else {
 			webshims.error("Required parameter captionData not supplied.");
 		}
 	};
-	
+
 	
 	mediaelement.createTrackList = function(mediaelem, baseData){
 		baseData = baseData || webshims.data(mediaelem, 'mediaelementBase') || webshims.data(mediaelem, 'mediaelementBase', {});
@@ -995,8 +977,9 @@ modified for webshims
 				if(Modernizr.track){
 					var shimedTextTracks = $.prop(this, 'textTracks');
 					var origTextTracks = this.textTracks;
+
 					if(shimedTextTracks.length != origTextTracks.length){
-						webshims.error("textTracks couldn't be copied");
+						webshims.warn("textTracks couldn't be copied");
 					}
 					
 					$('track', this).each(hideNativeTracks);

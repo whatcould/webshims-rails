@@ -1,17 +1,18 @@
 webshims.register('form-validation', function($, webshims, window, document, undefined, options){
 	"use strict";
-	
+
 	var isWebkit = 'webkitURL' in window;
 	var hasNative = Modernizr.formvalidation && !webshims.bugs.bustedValidity;
 	var chromeBugs = isWebkit && hasNative;
 	var webkitVersion = chromeBugs && parseFloat((navigator.userAgent.match(/Safari\/([\d\.]+)/) || ['', '999999'])[1], 10);
 	
 	var iVal = options.iVal;
+
 	if(!iVal.fieldWrapper){
-		iVal.fieldWrapper = ':not(span), :not(label), :not(em), :not(strong), :not(p)'; 
+		iVal.fieldWrapper = ':not(span):not(label):not(em):not(strong):not(p)';
 	}
 	var invalidClass = iVal.errorClass || (iVal.errorClass = 'user-error');
-	var validClass = iVal.successClass || 'user-success';
+	var validClass = iVal.successClass || (iVal.successClass = 'user-success');
 	
 	var invalidWrapperClass = iVal.errorWrapperClass || (iVal.errorWrapperClass = 'ws-invalid');
 	var successWrapperClass = iVal.successWrapperClass || (iVal.successWrapperClass = 'ws-success');
@@ -24,9 +25,6 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	var addModule = loader.addModule;
 	
 	var emptyJ = $([]);
-	var isValid = function(elem){
-		return ($.prop(elem, 'validity') || {valid: 1}).valid;
-	};
 	
 	var nonFormFilter = function(){
 		return !$.prop(this, 'form');
@@ -92,6 +90,11 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		week: 1,
 		'datetime-local': 1
 	};
+	var updateValidationEvents = {
+		refreshvalidityui: 1,
+		updatevalidation: 1
+	};
+	var iValClasses = '.'+ iVal.errorClass +', .'+iVal.successClass;
 	var switchValidityClass = function(e){
 		if(!iVal.sel){return;}
 		var elem, timer, shadowElem, shadowType;
@@ -111,7 +114,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					return;
 			}
 			if(webshims.refreshCustomValidityRules && webshims.refreshCustomValidityRules(elem) == 'async'){
-				$(elem).one('refreshvalidityui', switchValidityClass);
+				$(elem).one('updatevalidation', switchValidityClass);
 				return;
 			}
 			
@@ -169,32 +172,64 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			if(timer){
 				clearTimeout(timer);
 			}
-			if(e.type == 'refreshvalidityui'){
+			if(updateValidationEvents[e.type]){
+				if(e.type == 'refreshvalidityui'){
+					webshims.warn('refreshvalidityui was renamed to updatevalidation');
+				}
 				switchClass();
 			} else {
 				$.data(elem, 'webshimsswitchvalidityclass', setTimeout(switchClass, 9));
 			}
 		}
 	};
-	
+	var eachReset = function(){
+		webshims.errorbox.reset(this);
+	};
+	if('validityUIEvents' in options){
+		webshims.warn('validityUIEvents was renamed to iVal.events');
+		iVal.events = options.validityUIEvents;
+	}
+	if('events' in iVal){
+		iVal.events = iVal.events || '';
+	} else {
+		iVal.events = 'focusout change';
+	}
+
+	if(iVal.events){
+		iVal.events += ' ';
+	}
+
 	$(document.body || 'html')
-		.on(options.validityUIEvents || 'focusout change refreshvalidityui invalid', switchValidityClass)
-		.on('reset resetvalui', function(e){
+		.on(iVal.events+'refreshvalidityui updatevalidation.webshims invalid', switchValidityClass)
+		.on('reset resetvalidation.webshims resetvalui', function(e){
+			var noIValTrigger;
 			var elems = $(e.target);
+			if(e.type == 'resetvalui'){
+				webshims.warn('resetvalui was renamed to resetvalidation');
+			}
 			if(elems.is('form, fieldset')){
+				if(elems[0].nodeName.toLowerCase() == 'form'){
+					noIValTrigger = !elems.is(iVal.sel);
+				}
 				elems = elems.jProp('elements');
 			}
-			elems
-				.filter('.user-error, .user-success')
+			elems = elems
+				.filter(iValClasses)
 				.removeAttr('aria-invalid')
-				.removeClass('user-error')
-				.removeClass('user-success')
+				.removeClass(iVal.errorClass +' '+ iVal.successClass)
 				.getNativeElement()
 				.each(function(){
 					$.removeData(this, 'webshimsinvalidcause');
 				})
-				.trigger('resetvalidityui')
 			;
+
+			if(!noIValTrigger){
+				if(noIValTrigger === false){
+					elems.each(eachReset);
+				} else {
+					elems.trigger('resetvalidityui.webshims');
+				}
+			}
 		})
 	;
 	
@@ -218,6 +253,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	var rtlReplace = function(ret){
 		return ret == 'left' ? 'right' : 'left';
 	};
+
 	webshims.getRelOffset = function(posElem, relElem, opts){
 		var offset, bodyOffset, dirs;
 		posElem = $(posElem);
@@ -297,6 +333,11 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			element = $(element || this.options.prepareFor).getNativeElement() ;
 			
 			var that = this;
+			var closeOnOutSide = function(e){
+				if(that.options.hideOnBlur && !that.stopBlur && !that.isInElement([that.lastElement[0], element[0], that.element[0]], e.target)){
+					that.hide();
+				}
+			};
 			var visual = $(element).getShadowElement();
 			var delayedRepos = function(e){
 				clearTimeout(that.timers.repos);
@@ -317,12 +358,13 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					that.element.addClass('ws-po-visible').trigger('wspopovershow');
 				}, 14);
 			}, 4);
-			
-			$(document.body || document).on('focusin'+this.eventns+' mousedown'+this.eventns, function(e){
-				if(that.options.hideOnBlur && !that.stopBlur && !that.isInElement([that.lastElement[0], element[0], that.element[0]], e.target)){
-					that.hide();
-				}
-			});
+
+			$(document.body)
+				.on('focusin'+this.eventns+' mousedown'+this.eventns, closeOnOutSide)
+				//http://www.quirksmode.org/m/tests/eventdelegation2.html
+				.children(':not(script), :not(iframe), :not(noscript)')
+				.on('mousedown'+this.eventns, closeOnOutSide)
+			;
 			
 			this.element.off('pospopover').on('pospopover', delayedRepos);
 			$(window).on('resize'+this.eventns + ' pospopover'+this.eventns, delayedRepos);
@@ -396,7 +438,11 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		clear: function(){
 			$(window).off(this.eventns);
 			$(document).off(this.eventns);
-			$(document.body).off(this.eventns);
+			$(document.body)
+				.off(this.eventns)
+				.children(':not(script), :not(iframe), :not(noscript)')
+				.off(this.eventns)
+			;
 			this.element.off('transitionend'+this.eventns);
 			this.stopBlur = false;
 			this.lastOpts = false;
@@ -444,9 +490,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			collision: 'none'
 		}, options.messagePopover.position || {});
 			
-		var focusTimer = false;
-		
-		var api = webshims.objectCreate(webshims.wsPopover, {}, options.messagePopover);
+		var api = webshims.objectCreate(webshims.wsPopover, undefined, options.messagePopover);
 		var boundHide = api.hide.bind(api);
 		
 		api.element.addClass('validity-alert').attr({role: 'alert'});
@@ -667,7 +711,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			if(fieldWrapper.hasClass(invalidWrapperClass)){
 				$(elem).filter('input').off('.recheckinvalid');
 				if(!reset && (invalid = $('input:invalid, select:invalid, textarea:invalid', fieldWrapper)[0])){
-					$(invalid).trigger('refreshvalidityui');
+					$(invalid).trigger('updatevalidation.webshims');
 				} else {
 					errorBox = this.get(elem, fieldWrapper);
 					fieldWrapper.removeClass(invalidWrapperClass);
@@ -762,7 +806,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					}
 				}
 			},
-			resetvalidityui: function(e){
+			'resetvalidityui.webshims': function(e){
 				if (iVal.sel) {
 					var form = $(e.target).jProp('form');
 					if (form.is(iVal.sel)) {
@@ -851,151 +895,11 @@ webshims.register('form-validation', function($, webshims, window, document, und
 			jElm = null;
 		});
 	})();
-	
-	
-	if(!$.event.special.change && !$.event.special.input && Modernizr.inputtypes && options.fixRangeChange){
-		var rangeChange = {
-			
-			trigger: function(e){
-				if(rangeChange.blockElement){
-					rangeChange.blockElement = false;
-					setTimeout(function(){
-						if(rangeChange.requestedChange && rangeChange.value != rangeChange.requestedChange.value){
-							$(rangeChange.requestedChange).trigger('change');
-						}
-						rangeChange.value = false;
-					}, 9);
-				}
-				
-			},
-			lastValue: false,
-			updateInputValue: function(e){
-				rangeChange.lastValue = e.target.value;
-			},
-			triggerInput: function(e){
-				if(rangeChange.lastValue !== false && rangeChange.lastValue != e.target.value){
-					$(e.target).trigger('input');
-				}
-			},
-			inputTeardown: function(e){
-				$(e.target)
-					.off('input', rangeChange.updateInputValue)
-					.off('blur', rangeChange.inputTeardown)
-				;
-				rangeChange.lastValue = false;
-			},
-			inputSetup: function(e){
-				
-				if(e.target.type == 'range'){
-					rangeChange.inputTeardown(e);
-					rangeChange.lastValue = e.target.value;
-					$(e.target)
-						.on('input', rangeChange.updateInputValue)
-						.on('blur', rangeChange.inputTeardown)
-					;
-				}
-			}
-		};
-		
-		
-		$.each([{name: 'key', evt: 'keyup'}, {name: 'mouse', evt: 'mouseup'}, {name: 'touch', evt: 'touchend'}], function(i, obj){
-			var setup = obj.name + 'Setup';
-			var commit = obj.name + 'Commit';
-			rangeChange[obj.name+'Block'] = function(e){
-				
-				if(!rangeChange.blockElement && e.target.type == 'range'){
-					
-					rangeChange.blockElement = e.target;
-					rangeChange.value = e.target.value;
-					$(rangeChange.blockElement)
-						.off('blur', rangeChange.trigger)
-						.on('blur', rangeChange.trigger)
-					;
-					
-					$(document.body)
-						.off(obj.evt, rangeChange[commit])
-						.on(obj.evt, rangeChange[commit])
-					;
-				}
-			};
-			
-			rangeChange[commit] = function(e){
-				$(document.body).off(obj.evt, rangeChange[commit]);
-				rangeChange.trigger();
-			};
-			
-		});
-		
-		$(document.body || 'html').on({
-			mousedown: rangeChange.mouseBlock,
-			'keydown kepress': function(e){
-				if(e.keyCode < 45 && e.keyCode > 30){
-					rangeChange.keyBlock(e);
-				}
-			},
-			'touchstart': rangeChange.touchBlock,
-			focusin: rangeChange.inputSetup
-		});
-		
-		$.extend(true, $.event.special, {
-			change: {
-				handle: function(e){
-					
-					if(!e.isTrigger && rangeChange.blockElement == e.target){
-						rangeChange.requestedChange = e.target;
-						rangeChange.triggerInput(e);
-						return false;
-					} else if(rangeChange.requestedChange == e.target){
-						rangeChange.requestedChange = false;
-					}
-					e.handleObj.handler.apply(this, arguments);
-				}
-			},
-			input: {
-				handle: (function(){
-					var lastValue, lastElement;
-					
-					var remove = function(){
-						if(lastElement){
-							$(lastElement).off('change', remove);
-						}
-						lastValue = false;
-						lastElement = false;
-					};
-					
-					var setup = function(e){
-						remove(e);
-						lastElement = e.target;
-						lastValue = e.target.value;
-						$(e.target).on('change', remove);
-					};
-					
-					return function(e){
-						var value;
-						if(!e.isTrigger && e.target.type == 'range'){
-							
-							if(lastElement != e.target){
-								setup(e);
-							} else if(lastElement == e.target){
-								if(lastValue == (value = e.target.value)){
-									return false;
-								}
-								lastValue = e.target.value;
-							}
-						}
-						e.handleObj.handler.apply(this, arguments);
-					};
-				})()
-			}
-		});
-	}
-	if(webshims.cfg.debug !== false && iVal.sel != '.ws-instantvalidation'){
-		$(function(){
-			if($('form.ws-instantvalidation').length){
-				webshims.error('.ws-instantvalidation was renamed to .ws-validate');
-			}
-		});
-	}
+
+	addModule('form-fixrangechange', {
+		test: !(!$.event.special.change && !$.event.special.input && Modernizr.inputtypes && Modernizr.inputtypes.range && options.fixRangeChange)
+	});
+
 	addModule('form-combat', {
 		d: ['dom-support'],
 		test: !(($.mobile && ($.mobile.selectmenu || $.mobile.checkboxradio)) || $.fn.select2 || $.fn.chosen || $.fn.selectpicker || $.fn.selectBoxIt)
@@ -1006,5 +910,5 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		test: !!($.position && $.position.getScrollInfo)
 	});
 	
-	loader.loadList(['form-combat', 'position']);
+	loader.loadList(['form-combat', 'position', 'form-fixrangechange']);
 });

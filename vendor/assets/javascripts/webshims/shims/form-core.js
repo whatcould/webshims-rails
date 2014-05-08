@@ -49,27 +49,27 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	/*
 	 * Selectors for all browsers
 	 */
-	var rElementsGroup = /^(?:form|fieldset)$/i;
-	var hasInvalid = function(elem){
-		var ret = false;
-		$(elem).jProp('elements').each(function(){
-			if(!rElementsGroup.test(this.nodeName || '')){
-				ret = $(this).is(':invalid');
-				if(ret){
-					return false;
-				}
-			}
-			
-		});
-		return ret;
-	};
 	
 	var extendSels = function(){
 		var matches, matchesOverride;
 		var exp = $.expr[":"];
+		var rElementsGroup = /^(?:form|fieldset)$/i;
+		var hasInvalid = function(elem){
+			var ret = false;
+			$(elem).jProp('elements').each(function(){
+				if(!rElementsGroup.test(this.nodeName || '')){
+					ret = exp.invalid(this);
+					if(ret){
+						return false;
+					}
+				}
+
+			});
+			return ret;
+		};
 		$.extend(exp, {
 			"valid-element": function(elem){
-				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) :!!($.prop(elem, 'willValidate') && isValid(elem));
+				return rElementsGroup.test(elem.nodeName || '') ? !hasInvalid(elem) : !!($.prop(elem, 'willValidate') && isValid(elem));
 			},
 			"invalid-element": function(elem){
 				return rElementsGroup.test(elem.nodeName || '') ? hasInvalid(elem) : !!($.prop(elem, 'willValidate') && !isValid(elem));
@@ -124,27 +124,36 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			};
 		}
 	};
-	
-	if($.expr.filters){
-		extendSels();
-	} else {
-		webshims.ready('sizzle', extendSels);
-	}
-	
-	
-	webshims.triggerInlineForm = function(elem, event){
-		$(elem).trigger(event);
+	var formExtras = {
+		noAutoCallback: true,
+		options: options
 	};
-	
+	var addModule = webshims.loader.addModule;
 	var lazyLoadProxy = function(obj, fn, args){
 		lazyLoad();
 		webshims.ready('form-validation', function(){
 			obj[fn].apply(obj, args);
 		});
 	};
-	
+
 	var transClass = ('transitionDelay' in document.documentElement.style) ?  '' : ' no-transition';
 	var poCFG = webshims.cfg.wspopover;
+
+	addModule('form-validation', $.extend({d: ['form-message']}, formExtras));
+
+	addModule('form-validators', $.extend({}, formExtras));
+	
+	if($.expr.filters){
+		extendSels();
+	} else {
+		webshims.ready('sizzle', extendSels);
+	}
+
+	webshims.triggerInlineForm = function(elem, event){
+		$(elem).trigger(event);
+	};
+	
+
 	if(!poCFG.position && poCFG.position !== false){
 		poCFG.position = {
 			at: 'left bottom',
@@ -266,7 +275,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 
 	webshims.ready('WINDOWLOAD', lazyLoad);
 
-	if(modules['form-number-date-ui'].loaded && modules['form-number-date-api'].test()){
+	if(modules['form-number-date-ui'].loaded && !options.customMessages && (modules['form-number-date-api'].test() || (Modernizr.inputtypes.range && Modernizr.inputtypes.color))){
 		webshims.isReady('form-number-date-ui', true);
 	}
 });

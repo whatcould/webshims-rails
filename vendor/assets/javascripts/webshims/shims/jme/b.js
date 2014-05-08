@@ -1,31 +1,17 @@
-webshims.register('jme', function($, webshims, window, doc, undefined, options){
+webshims.register('jme', function($, webshims, window, doc, undefined){
 	"use strict";
 	var props = {};
-
 	var fns = {};
-	var allowPreload = false;
-	$(window).on('load', function(){
-		allowPreload = true;
-		var scrollTimer;
-		var allow = function(){
-			allowPreload = true;
-		};
-		$(window).on('scroll', function(){
-			allowPreload = false;
-			clearTimeout(scrollTimer);
-			scrollTimer = setTimeout(allow, 999);
-		});
-	});
+	var slice = Array.prototype.slice;
 
+	var options = $.extend({selector: '.mediaplayer'}, webshims.cfg.mediaelement.jme);
+	webshims.cfg.mediaelement.jme = options;
 
 
 	$.jme = {
-		version: '2.0.9',
-		classNS: '',
-		options: {},
 		plugins: {},
 		data: function(elem, name, value){
-			var data = $(elem).data(ns+'jme') || $.data(elem, ns+'jme', {});
+			var data = $(elem).data('jme') || $.data(elem, 'jme', {});
 			if(value === undefined){
 				return (name) ? data[name] : data;
 			} else {
@@ -39,6 +25,14 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 			}
 			if(!plugin.className){
 				plugin.className = name;
+			}
+
+			options[name] = $.extend(plugin.options || {}, options[name]);
+
+			if(options[name] && options[name].text){
+				plugin.text = options[name].text;
+			} else if(options.i18n && options.i18n[name]){
+				plugin.text = options.i18n[name];
 			}
 		},
 		defineMethod: function(name, fn){
@@ -79,18 +73,6 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 					$.jme.data(elem, name, setValue);
 				}
 			}
-		},
-		setText: function(name, text){
-			var obj = name;
-			if(name && text){
-				obj = {};
-				obj[name] = text;
-			}
-			$.each(obj, function(name, text){
-				if($.jme.plugins[name]){
-					$.jme.plugins[name].text = text;
-				}
-			});
 		}
 	};
 
@@ -99,7 +81,7 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 	};
 
 	$.fn.jmeFn = function(fn){
-		var args = Array.prototype.slice.call( arguments, 1 );
+		var args = slice.call( arguments, 1 );
 		var ret;
 		this.each(function(){
 			ret = (fns[fn] || $.prop(this, fn)).apply(this, args);
@@ -109,23 +91,21 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 		});
 		return (ret !== undefined) ? ret : this;
 	};
+	var idlStates = {
+		emptied: 1,
+		pause: 1
+	};
+	var unwaitingEvents = {
+		canplay: 1, canplaythrough: 1
+	};
 
 
-	options = $.extend({selector: '.mediaplayer'}, webshims.cfg.mediaelement.jme);
-	webshims.cfg.mediaelement.jme = options;
 	var baseSelector = options.selector;
-	var pluginSelectors = [];
-	var ns = '';
-
 
 	$.jme.initJME = function(context, insertedElement){
 		$(baseSelector, context).add(insertedElement.filter(baseSelector)).jmePlayer();
 	};
 
-	var idlStates = {
-		emptied: 1,
-		pause: 1
-	};
 
 	$.jme.getDOMList = function(attr){
 		var list = [];
@@ -146,80 +126,25 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 		return list;
 	};
 
-	webshims.ready('dom-support', function(){
-		if($('<input />').prop('labels')){return;}
-		webshims.defineNodeNamesProperty('button, input, keygen, meter, output, progress, select, textarea', 'labels', {
-			prop: {
-				get: function(){
-					var labels = [];
-					var id = this.id;
-					if(id){
-						labels = $('label[for="'+ id +'"]');
-					}
-					if(!labels[0]) {
-						labels = $(this).closest('label', this.form);
-					}
-					return labels.get();
-				},
-				writeable: false
-			}
-		});
-	});
-
 
 	$.jme.getButtonText = function(button, classes){
-
-		var btnTextElem = $('span.jme-text, +label span.jme-text', button);
-		var btnLabelElem = button.prop('labels');
-
-		btnLabelElem = (btnLabelElem && btnLabelElem[0]) ? $(btnLabelElem).eq(0) : false;
-
-		if(!btnTextElem[0]){
-			btnTextElem = btnLabelElem || button;
-		}
-
-		var txt = btnTextElem.text().split('/');
-		var title = button.prop('title').split('/');
-
 		var isCheckbox;
-		var doText;
-		var doTitle;
 		var lastState;
 		var txtChangeFn = function(state){
 			if(lastState === state){return;}
 			lastState = state;
-			if(doText){
-				btnTextElem.text(txt[state || 0]);
-			}
-			if(doTitle){
-				button.prop('title', txt[state || 0]);
-				if (btnLabelElem) {
-					btnLabelElem.prop('title', txt[state || 0]);
-				}
-			}
 
-			if(classes){
-				button
-					.removeClass(classes[(state) ? 0 : 1])
-					.addClass(classes[state])
-				;
-			}
+
+			button
+				.removeClass(classes[(state) ? 0 : 1])
+				.addClass(classes[state])
+			;
+
 			if(isCheckbox){
 				button.prop('checked', !!state);
 				(button.data('checkboxradio') || {refresh: $.noop}).refresh();
 			}
 		};
-
-		if(txt.length == 2){
-			txt[0] = txt[0].trim();
-			txt[1] = txt[1].trim();
-			doText = true;
-		}
-		if(title.length == 2){
-			title[0] = title[0].trim();
-			title[1] = title[1].trim();
-			doTitle = true;
-		}
 
 		if (button.is('[type="checkbox"], [type="radio"]')){
 			button.prop('checked', function(){
@@ -242,8 +167,8 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 				$.jme.data(this, $.extend(true, {}, opts));
 			}
 
-			var mediaUpdateFn, init, canPlay, removeCanPlay, canplayTimer, needPreload, playerSize;
-			var media = $('audio, video', this).filter(':first');
+			var mediaUpdateFn, canPlay, removeCanPlay, canplayTimer, lastState, stopEmptiedEvent;
+			var media = $('audio, video', this).eq(0);
 			var base = $(this);
 
 			var jmeData = $.jme.data(this);
@@ -254,23 +179,28 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 			mediaData.player = base;
 			mediaData.media = media;
 			if(!jmeData.media){
-				init = true;
-				needPreload = !media.prop('autoplay');
 
 				removeCanPlay = function(){
 					media.off('canplay', canPlay);
 					clearTimeout(canplayTimer);
 				};
 				canPlay = function(){
-					var state = ($.prop(this, 'paused')) ? 'idle' : 'playing';
+					var state = (media.prop('paused')) ? 'idle' : 'playing';
 					base.attr('data-state', state);
 				};
 				mediaUpdateFn = function(e){
 					var state = e.type;
 					var readyState;
 					var paused;
-
 					removeCanPlay();
+
+					if(unwaitingEvents[state] && lastState != 'waiting'){
+						return;
+					}
+
+					if(stopEmptiedEvent && state == 'emptied'){
+						return;
+					}
 
 					if(state == 'ended' || $.prop(this, 'ended')){
 						state = 'ended';
@@ -304,51 +234,45 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 					if(state == 'idle' && base._seekpause){
 						state = false;
 					}
+
 					if(state){
+						lastState = state;
 						base.attr('data-state', state);
 					}
 				};
 
-				playerSize = (function(){
-					var lastSize;
-					var sizes = [
-						{size: 380, name: 'x-small'},
-						{size: 490, name: 'small'},
-						{size: 756, name: 'medium'},
-						{size: 1024, name: 'large'}
-					];
 
-					var len = sizes.length;
-					return function(){
-						var size = 'x-large';
-						var i = 0;
-						var width = base.outerWidth();
-						for(; i < len; i++){
-							if(sizes[i].size >= width){
-								size = sizes[i].name;
-								break;
-							}
-						}
-						if(lastSize != size){
-							lastSize = size;
-							base.attr('data-playersize', size);
-						}
-					};
-				})();
 				jmeData.media = media;
 				jmeData.player = base;
 				media
-					.on('ended', function(){
-						removeCanPlay();
-						media.jmeFn('pause');
-						if(!media.prop('autoplay') && !media.prop('loop') && !media.hasClass('no-reload')){
-							media.jmeFn('load');
-						}
-					})
+					.on('ended emptied play', (function(){
+						var timer;
+						var releaseEmptied = function(){
+							stopEmptiedEvent = false;
+						};
+						var ended = function(){
+							removeCanPlay();
+							media.jmeFn('pause');
+							if(!options.noReload && media.prop('ended') && media.prop('paused') && !media.prop('autoplay') && !media.prop('loop') && !media.hasClass('no-reload')){
+								stopEmptiedEvent = true;
+								media.jmeFn('load');
+								base.attr('data-state', 'ended');
+								setTimeout(releaseEmptied);
+
+							}
+						};
+						return function(e){
+
+							clearTimeout(timer);
+							if(e.type == 'ended' && !options.noReload && !media.prop('autoplay') && !media.prop('loop') && !media.hasClass('no-reload')){
+								timer = setTimeout(ended);
+							}
+						};
+					})())
 					.on('emptied waiting canplay canplaythrough playing ended pause mediaerror', mediaUpdateFn)
 					.on('volumechange updateJMEState', function(){
 						var volume = $.prop(this, 'volume');
-						base[!volume || $.prop(this, 'muted') ? 'addClass' : 'removeClass'](ns +'state-muted');
+						base[!volume || $.prop(this, 'muted') ? 'addClass' : 'removeClass']('state-muted');
 
 						if(volume < 0.01){
 							volume = 'no';
@@ -361,30 +285,8 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 						}
 						base.attr('data-volume', volume);
 					})
-					.on('emptied', function(e){
-						if(e.type == 'emptied'){
-							needPreload = !media.prop('autoplay');
-						}
-					})
 				;
 
-				base
-					.on({
-						useractive: function(){
-							base.attr('data-useractivity', 'true');
-						}
-					})
-					.on('userinactive', {idletime: 3500}, function(){
-						base.attr('data-useractivity', 'false');
-					})
-					.triggerHandler('userinactive')
-				;
-
-				playerSize();
-				webshims.ready('dom-support', function(){
-					base.onWSOff('updateshadowdom', playerSize);
-					webshims.addShadowDom();
-				});
 				if(mediaUpdateFn){
 					media.on('updateJMEState', mediaUpdateFn).triggerHandler('updateJMEState');
 				}
@@ -472,8 +374,9 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 					var options = $.jme.data(this);
 					options.player = data.player;
 					options.media = data.media;
-					if(options.rendered){return;}
-					options.rendered = true;
+					if(options._rendered){return;}
+					options._rendered = true;
+
 					if(plugin.options){
 						$.each(plugin.options, function(option, value){
 							if(!(option in options)){
@@ -493,84 +396,6 @@ webshims.register('jme', function($, webshims, window, doc, undefined, options){
 	});
 
 
-
-
-	(function(){
-		var activity = {
-			add: function(elem, cfg, name){
-				var data 		= $.data(elem, 'jmeuseractivity') || $.data(elem, 'jmeuseractivity', {idletime: 2500, idle: true, trigger: {}}),
-					jElm 		= $(elem),
-					setInactive = function(){
-						if(!data.idle){
-							data.idle = true;
-							if ( data.trigger.userinactive ) {
-								jElm.trigger('userinactive');
-							}
-						}
-					},
-					x, y,
-					setActive 	= function(e){
-						if(!e || (e.type === 'mousemove' && e.pageX === x && e.pageY === y)){return;}
-						if(e.type === 'mousemove'){
-							 x = e.pageX;
-							 y = e.pageY;
-						}
-						if(data.idleTimer){
-							clearTimeout(data.idleTimer);
-						}
-						data.idleTimer = setTimeout(setInactive, data.idletime);
-						if(data.idle){
-							data.idle = false;
-							if( data.trigger.useractive ){
-								jElm.trigger('useractive');
-							}
-						}
-					}
-				;
-
-				data.idletime = (cfg || {}).idletime || data.idletime;
-				if(cfg && 'idle' in cfg){
-					data.idle = cfg.idle;
-				}
-				data.trigger[name] = true;
-
-				if(!data.bound){
-					jElm
-						.on('mouseleave.jmeuseractivity', setInactive)
-						.on('mousemove.jmeuseractivity focusin.jmeuseractivity mouseenter.jmeuseractivity keydown.jmeuseractivity keyup.jmeuseractivity mousedown.jmeuseractivity', setActive)
-					;
-					data.bound = true;
-				}
-				if(!data.idle){
-					setActive({type: 'initunidled'});
-				}
-			},
-			remove: function(elem, name){
-				var data = $.data(elem, 'jmeuseractivity') || $.data(elem, 'jmeuseractivity', {idletime: 2500, idle: true, trigger: {}});
-				data.trigger[name] = false;
-				if(!data.trigger.useractive && !data.trigger.userinactive){
-					$(elem).off('.jmeuseractivity');
-					data.bound = false;
-				}
-			}
-		};
-		$.each(['useractive', 'userinactive'], function(i, name){
-			$.event.special[name] = {
-				setup: function(cfg){
-					activity.add(this, cfg, name);
-				},
-				teardown: function(){
-					activity.remove(this, name);
-				}
-			};
-		});
-	})();
-
-
-	webshims.ready('mediaelement', function(){
-		webshims.addReady($.jme.initJME);
-	});
+	webshims.addReady($.jme.initJME);
+	webshims._polyfill(['mediaelement']);
 });
-
-
-
