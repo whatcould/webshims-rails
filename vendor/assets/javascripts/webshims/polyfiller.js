@@ -116,7 +116,7 @@
 	path = path.split('?')[0].slice(0, path.lastIndexOf("/") + 1) + 'shims/';
 
 	$.extend(webshims, {
-		version: '1.12.7',
+		version: '1.13.0',
 		cfg: {
 			enhanceAuto: window.Audio && (!window.matchMedia || matchMedia('(min-device-width: 721px)').matches),
 			//addCacheBuster: false,
@@ -923,6 +923,17 @@
 		d: ['es5'],
 		c: [16, 7, 2, 15, 30, 3, 8, 4, 9, 10, 25, 19, 20, 26, 31, 34]
 	});
+
+	document.createElement('picture');
+	addPolyfill('picture', {
+		test: !!window.HTMLPictureElement
+	});
+
+
+	addPolyfill('promise', {
+		test: !!(window.Promise && Promise.all)
+	});
+
 	
 	
 	//<geolocation

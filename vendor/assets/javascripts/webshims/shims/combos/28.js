@@ -1037,7 +1037,9 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 		}
 		if(!message){
 			message = getMessageFromObj(validityMessages[''][name], elem) || $.prop(elem, 'validationMessage');
-			webshims.info('could not find errormessage for: '+ name +' / '+ $.prop(elem, 'type') +'. in language: '+webshims.activeLang());
+			if(name != 'customError'){
+				webshims.info('could not find errormessage for: '+ name +' / '+ $.prop(elem, 'type') +'. in language: '+webshims.activeLang());
+			}
 		}
 		message = webshims.replaceValidationplaceholder(elem, message, name);
 		
@@ -1302,7 +1304,7 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 		var stepDescriptor = webshims.defineNodeNameProperty('input', name, {
 			prop: {
 				value: function(factor){
-					var step, val, dateVal, valModStep, alignValue, cache, base, attrVal;
+					var step, val, valModStep, alignValue, cache, base, attrVal;
 					var type = getType(this);
 					if(typeModels[type] && typeModels[type].asNumber){
 						cache = {type: type};
@@ -1312,12 +1314,9 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 						}
 						factor *= stepFactor;
 						
-						val = $.prop(this, 'valueAsNumber');
+
 						
-						if(isNaN(val)){
-							webshims.info("valueAsNumber is NaN can't apply stepUp/stepDown ");
-							throw('invalid state error');
-						}
+
 						
 						step = webshims.getStep(this, type);
 						
@@ -1328,7 +1327,21 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 						
 						webshims.addMinMaxNumberToCache('min', $(this), cache);
 						webshims.addMinMaxNumberToCache('max', $(this), cache);
-						
+
+						val = $.prop(this, 'valueAsNumber');
+
+						if(factor > 0 && !isNaN(cache.minAsNumber) && (isNaN(val) || cache.minAsNumber > val)){
+							$.prop(this, 'valueAsNumber', cache.minAsNumber);
+							return;
+						} else if(factor < 0 && !isNaN(cache.maxAsNumber) && (isNaN(val) || cache.maxAsNumber < val)){
+							$.prop(this, 'valueAsNumber', cache.maxAsNumber);
+							return;
+						}
+
+						if(isNaN(val)){
+							val = 0;
+						}
+
 						base = cache.minAsNumber;
 						
 						if(isNaN(base) && (attrVal = $.prop(this, 'defaultValue'))){
@@ -1353,7 +1366,7 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 						
 						if( (!isNaN(cache.maxAsNumber) && val > cache.maxAsNumber) || (!isNaN(cache.minAsNumber) && val < cache.minAsNumber) ){
 							webshims.info("max/min overflow can't apply stepUp/stepDown");
-							throw('invalid state error');
+							return;
 						}
 						
 						$.prop(this, 'valueAsNumber', val);
@@ -1707,7 +1720,8 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 		});
 	}
 	
-});;webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
+});
+;webshims.register('form-datalist', function($, webshims, window, document, undefined, options){
 	"use strict";
 	var lazyLoad = function(name){
 		if(!name || typeof name != 'string'){

@@ -198,7 +198,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		var stepDescriptor = webshims.defineNodeNameProperty('input', name, {
 			prop: {
 				value: function(factor){
-					var step, val, dateVal, valModStep, alignValue, cache, base, attrVal;
+					var step, val, valModStep, alignValue, cache, base, attrVal;
 					var type = getType(this);
 					if(typeModels[type] && typeModels[type].asNumber){
 						cache = {type: type};
@@ -208,12 +208,9 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						}
 						factor *= stepFactor;
 						
-						val = $.prop(this, 'valueAsNumber');
+
 						
-						if(isNaN(val)){
-							webshims.info("valueAsNumber is NaN can't apply stepUp/stepDown ");
-							throw('invalid state error');
-						}
+
 						
 						step = webshims.getStep(this, type);
 						
@@ -224,7 +221,21 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						
 						webshims.addMinMaxNumberToCache('min', $(this), cache);
 						webshims.addMinMaxNumberToCache('max', $(this), cache);
-						
+
+						val = $.prop(this, 'valueAsNumber');
+
+						if(factor > 0 && !isNaN(cache.minAsNumber) && (isNaN(val) || cache.minAsNumber > val)){
+							$.prop(this, 'valueAsNumber', cache.minAsNumber);
+							return;
+						} else if(factor < 0 && !isNaN(cache.maxAsNumber) && (isNaN(val) || cache.maxAsNumber < val)){
+							$.prop(this, 'valueAsNumber', cache.maxAsNumber);
+							return;
+						}
+
+						if(isNaN(val)){
+							val = 0;
+						}
+
 						base = cache.minAsNumber;
 						
 						if(isNaN(base) && (attrVal = $.prop(this, 'defaultValue'))){
@@ -249,7 +260,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						
 						if( (!isNaN(cache.maxAsNumber) && val > cache.maxAsNumber) || (!isNaN(cache.minAsNumber) && val < cache.minAsNumber) ){
 							webshims.info("max/min overflow can't apply stepUp/stepDown");
-							throw('invalid state error');
+							return;
 						}
 						
 						$.prop(this, 'valueAsNumber', val);
@@ -603,7 +614,8 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		});
 	}
 	
-});;(function($){
+});
+;(function($){
 	"use strict";
 
 	var isNumber = function(string){
@@ -2183,7 +2195,6 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				}
 				this.elemHelper.prop('valueAsNumber', start);
 				this.options.defValue = this.elemHelper.prop('value');
-				
 			},
 			reorderInputs: function(){
 				if(splitInputs[this.type]){
@@ -2250,7 +2261,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 							selectionEnd = this._getSelectionEnd(val);
 						}
 						this.element.prop(name, val);
-						if(selectionEnd){
+						if(selectionEnd != null){
 							this.element.prop('selectionEnd', selectionEnd);
 						}
 					}
@@ -2265,6 +2276,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			spinBtnProto[name] = function(val){
 				this.elemHelper.prop(name, val);
 				this[numName] = this.asNumber(val);
+
 				if(this.valueAsNumber != null && (isNaN(this.valueAsNumber) || (!isNaN(this[numName]) && (this.valueAsNumber * factor) < (this[numName] * factor)))){
 					this._setStartInRange();
 				}
@@ -2901,11 +2913,11 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			
 			var type = $.prop(this, 'type');
 			
-			var i, opts, data, optsName, labels, cNames;
+			var i, opts, data, optsName, labels, cNames, hasInitialFocus;
 			if(inputTypes[type] && webshims.implement(this, 'inputwidgets')){
 				data = {};
 				optsName = type;
-				
+				hasInitialFocus = $(this).is(':focus');
 				labels = $(this).jProp('labels');
 				opts = $.extend(webshims.getOptions(this, type, [options.widgets, options[type], $($.prop(this, 'form')).data(type)]), {
 					orig: this,
@@ -3029,6 +3041,9 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 					sizeInput(data.shim);
 				} else {
 					$(this).css('display', 'none');
+				}
+				if(hasInitialFocus){
+					$(this).getShadowFocusElement().trigger('focus');
 				}
 			}
 			

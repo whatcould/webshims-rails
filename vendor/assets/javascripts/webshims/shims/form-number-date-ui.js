@@ -964,7 +964,6 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 				}
 				this.elemHelper.prop('valueAsNumber', start);
 				this.options.defValue = this.elemHelper.prop('value');
-				
 			},
 			reorderInputs: function(){
 				if(splitInputs[this.type]){
@@ -1031,7 +1030,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 							selectionEnd = this._getSelectionEnd(val);
 						}
 						this.element.prop(name, val);
-						if(selectionEnd){
+						if(selectionEnd != null){
 							this.element.prop('selectionEnd', selectionEnd);
 						}
 					}
@@ -1046,6 +1045,7 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			spinBtnProto[name] = function(val){
 				this.elemHelper.prop(name, val);
 				this[numName] = this.asNumber(val);
+
 				if(this.valueAsNumber != null && (isNaN(this.valueAsNumber) || (!isNaN(this[numName]) && (this.valueAsNumber * factor) < (this[numName] * factor)))){
 					this._setStartInRange();
 				}
@@ -1682,11 +1682,11 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 			
 			var type = $.prop(this, 'type');
 			
-			var i, opts, data, optsName, labels, cNames;
+			var i, opts, data, optsName, labels, cNames, hasInitialFocus;
 			if(inputTypes[type] && webshims.implement(this, 'inputwidgets')){
 				data = {};
 				optsName = type;
-				
+				hasInitialFocus = $(this).is(':focus');
 				labels = $(this).jProp('labels');
 				opts = $.extend(webshims.getOptions(this, type, [options.widgets, options[type], $($.prop(this, 'form')).data(type)]), {
 					orig: this,
@@ -1810,6 +1810,9 @@ webshims.register('form-number-date-ui', function($, webshims, window, document,
 					sizeInput(data.shim);
 				} else {
 					$(this).css('display', 'none');
+				}
+				if(hasInitialFocus){
+					$(this).getShadowFocusElement().trigger('focus');
 				}
 			}
 			
