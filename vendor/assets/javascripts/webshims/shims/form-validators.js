@@ -12,8 +12,81 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 	var initTest;
 	var elemSels = 'input, select, textarea, fieldset[data-dependent-validation]';
 	var onEventTest = function(e){
+		if(e.type == 'refreshCustomValidityRules'){
+			webshims.error('refreshCustomValidityRules event was renamed to updatecustomvalidity');
+		}
 		webshims.refreshCustomValidityRules(e.target);
 	};
+	var autocompleteEvaluator = (function(){
+
+		function createEvaluator(form){
+			var noTest;
+			var elements = {};
+			var timer;
+			var reTest = function(){
+				var elem, val;
+
+				for(var id in elements){
+					elem = elements[id].elem;
+					if(elem != noTest && elements[id].val != (val = elem.value)){
+						elements[id].val = val;
+						if($(elem).hasClass(iValClasses)){
+							$(elem).trigger('updatevalidation.webshims');
+						} else {
+							testValidityRules(elem);
+						}
+					}
+				}
+			};
+
+			$(form).on('autocomplete change', function(e){
+				clearTimeout(timer);
+				noTest = e.target;
+				timer = setTimeout(reTest, 9);
+			});
+			return elements;
+		}
+
+		function addToForm(form, elem, id){
+			var autoCompleteElements = $.data(form, 'autocompleteElements') || $.data(form, 'autocompleteElements', createEvaluator(form));
+			autoCompleteElements[id] = {
+				elem: elem,
+				val: elem.value
+			};
+		}
+
+		function removeFromForm(form, id){
+			var autoCompleteElements = $.data(form, 'autocompleteElements');
+			if(autoCompleteElements && autoCompleteElements[id]){
+				delete autoCompleteElements[id];
+			}
+		}
+
+		return {
+			add: function(elem){
+				var id, autocomplete;
+				if((id = elem.id) && (elem.type == 'password' || ((autocomplete = elem.autocomplete)  && autocomplete != 'off'))){
+					setTimeout(function(){
+						var form = $.prop(elem, 'form');
+						if(form){
+							addToForm(form, elem, id);
+						}
+					}, 9);
+				}
+			},
+			remove: function(elem){
+				var id;
+				if((id = elem.id)){
+					setTimeout(function(){
+						var form = $.prop(elem, 'form');
+						if(form){
+							removeFromForm(form, id);
+						}
+					}, 9);
+				}
+			}
+		};
+	})();
 	var noValidate = function(){
 		return !noValidate.types[this.type];
 	};
@@ -48,6 +121,7 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 			}
 		};
 	})();
+
 	webshims.refreshCustomValidityRules = function(elem){
 		if(!initTest){return;}
 		var val, setMessage;
@@ -57,6 +131,7 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 		var validity = data && $.prop(elem, 'validity') || {valid: 1};
 
 		if(data && (customMismatchedRule || validity.valid)){
+			val = $(elem).val();
 			setMessage = function(message, errorType){
 				blockCustom = true;
 
@@ -74,15 +149,20 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 							message = webshims.customErrorMessages[errorType][webshims.activeLang()] || webshims.customErrorMessages[errorType]['']  || message.customError || message.defaultMessage || '';
 						}
 					}
+					if(webshims.replaceValidationplaceholder){
+						message = webshims.replaceValidationplaceholder(elem, message, errorType);
+					}
+					autocompleteEvaluator.add(elem);
 				} else {
 					message = '';
 					data.customMismatchedRule = '';
+					autocompleteEvaluator.remove(elem);
 				}
 
 				$(elem).setCustomValidity(message);
 				blockCustom = false;
 			};
-			val = $(elem).val();
+
 			$.each(customValidityRules, function(name, test){
 				message = test(elem, val, data, setMessage) || '';
 				customMismatchedRule = name;
@@ -137,7 +217,7 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 				
 				formReady = true;
 			});
-			$(document).on('refreshCustomValidityRules', onEventTest);
+			$(document).on('refreshCustomValidityRules updatecustomvalidity', onEventTest);
 		}, 29);
 		
 	});
@@ -159,28 +239,28 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 	var getId = function(name){
 		return document.getElementById(name) || document.getElementsByName(name);
 	};
+
 	addCustomValidityRule('partialPattern', function(elem, val, pattern){
 		pattern = pattern.partialPattern;
 		if(!val || !pattern){return;}
 		return !(new RegExp('(' + pattern + ')', 'i').test(val));
 	}, 'This format is not allowed here.');
 	
-	
-	addCustomValidityRule('tooShort', function(elem, val, data){
-		if(!val || !data.minlength){return;}
-
-		if($.nodeName(elem, 'input')){
-			webshims.warn('depreacated data-minlength usage: Use pattern=".{'+ data.minlength +',}" instead.');
-		}
-		return data.minlength > val.length;
-	}, 'Entered value is too short.');
+	if(!('tooShort' in ($('<input />').prop('validity') || {}))){
+		addCustomValidityRule('tooShort', function(elem, val){
+			var minlength;
+			if(!val || val == elem.defaultValue || !(minlength = elem.getAttribute('minlength'))){return;}
+			minlength = parseInt(minlength, 10);
+			return minlength > 0 && minlength > val.length ? (webshims.validityMessages.__active || {}).tooShort || true : '';
+		}, 'Entered value is too short.');
+	}
 
 	addCustomValidityRule('grouprequired', function(elem, val, data){
-		var form;
-		var name = elem.name;
-		if(!name || elem.type !== 'checkbox' || !('grouprequired' in data)){return;}
+		var form, name;
+		if(!('grouprequired' in data) || elem.type !== 'checkbox' || !(name = elem.name)){return;}
 
-		if(!data.grouprequired || !data.grouprequired.checkboxes){
+		if(!data.grouprequired.checkboxes){
+			data.grouprequired = {};
 			data.grouprequired.checkboxes = $( ((form = $.prop(elem, 'form')) && form[name]) || document.getElementsByName(name)).filter('[type="checkbox"]');
 			data.grouprequired.checkboxes
 				.off('click.groupRequired')
@@ -191,7 +271,6 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 			data.grouprequired.checkboxes.not(elem).removeData('grouprequired');
 		}
 
-		
 		return !(data.grouprequired.checkboxes.filter(':checked:enabled')[0]);
 	}, 'Please check one of these checkboxes.');
 	
@@ -305,134 +384,133 @@ var iValClasses = '.'+ options.iVal.errorClass +', .'+options.iVal.successClass;
 		
 	}, 'The value of this field does not repeat the value of the other field');
 
-	addCustomValidityRule('valuevalidation', function(elem, val, data){
-		if(val && ('valuevalidation' in data)){
-			//Todo allow markup params
-			return $(elem).triggerHandler('valuevalidation', [{value: val, valueAsDate: $.prop(elem, 'valueAsDate'), isPartial: false}]) || '';
+	addCustomValidityRule('validatevalue', function(elem, val, data){
+		if(('validatevalue' in data)){
+			return $(elem).triggerHandler('validatevalue', [{value: val, valueAsDate: $.prop(elem, 'valueAsDate'), isPartial: false}]) || '';
 		}
 	}, 'This value is not allowed here');
 
-	if(window.JSON){
-		addCustomValidityRule('ajaxvalidate', function(elem, val, data){
-			if(!val || !data.ajaxvalidate){return;}
-			var opts;
-			if(!data.remoteValidate){
-				webshims.loader.loadList(['jajax']);
-				if(typeof data.ajaxvalidate == 'string'){
-					data.ajaxvalidate = {url: data.ajaxvalidate, depends: $([])};
-				} else {
-					data.ajaxvalidate.depends = data.ajaxvalidate.depends ?
-						$(typeof data.ajaxvalidate.depends == 'string' && data.ajaxvalidate.depends.split(' ') || data.ajaxvalidate.depends).map(getId) :
-						$([])
-					;
-				}
-				
-				data.ajaxvalidate.depends.on('refreshCustomValidityRules', function(){
-					webshims.refreshCustomValidityRules(elem);
-				});
-				
-				opts = data.ajaxvalidate;
-				
-				var remoteValidate = {
-					ajaxLoading: false,
-					restartAjax: false,
-					message: 'async',
-					cache: {},
-					update: function(remoteData){
-						if(this.ajaxLoading){
-							this.restartAjax = remoteData;
-						} else {
-							this.restartAjax = false;
-							this.ajaxLoading = true;
-							$.ajax(
-								$.extend({dataType: 'json'}, opts, {
-									url: opts.url,
-									depData: remoteData,
-									data: formCFG.fullRemoteForm || opts.fullForm ?
-										$(elem).jProp('form').serializeArray() :
-										remoteData,
-									success: this.getResponse,
-									complete: this._complete,
-									timeout: 3000
-								})
-							);
-						}
-					},
-					_complete: function(){
-						remoteValidate.ajaxLoading = false;
-						if(remoteValidate.restartAjax){
-							this.update(remoteValidate.restartAjax);
-						}
-						remoteValidate.restartAjax = false;
-					},
-					getResponse: function(data){
-						if(options.transformAjaxValidate){
-							data = options.transformAjaxValidate(data);
-						}
-						if(!data){
-							data = {message: '', valid: true};
-						} else if(typeof data == 'string'){
-							try {
-								data = JSON.parse(data);
-							} catch (er){}
-						}
-						
-						remoteValidate.message = ('message' in data) ? data.message : !data.valid;
-						remoteValidate.lastMessage = remoteValidate.message;
-						remoteValidate.blockUpdate = true;
-						$(elem).triggerHandler('updatevalidation.webshims');
-						remoteValidate.message = 'async';
-						remoteValidate.blockUpdate = false;
-					},
-					getData: function(){
-						var data;
-						data = {};
-						data[$.prop(elem, 'name') || $.prop(elem, 'id')] = $(elem).val();
-						opts.depends.each(function(){
-							if($(this).is(':invalid')){
-								data = false;
-								return false;
-							}
-							data[$.prop(this, 'name') || $.prop(this, 'id')] = $(this).val();
-						});
-						return data;
-					},
-					getTempMessage: function(){
-						var message = 'async';
-						var remoteData, dataStr;
-						if(!data.remoteValidate.blockUpdate){
-							remoteData = this.getData();
-							if(!remoteData){
-								message = '';
-							} else {
-								try {
-									dataStr = JSON.stringify(remoteData);
-								} catch(er){}
-								
-								if(dataStr === this.lastString){
-									message = this.ajaxLoading ? 'async' : this.lastMessage;
-								} else {
-									this.lastString = dataStr;
-									this.lastMessage = 'async';
-									clearTimeout(data.remoteValidate.timer);
-									data.remoteValidate.timer = setTimeout(function(){
-										data.remoteValidate.update(remoteData);
-									}, 9);
-								}
-								
-							}
-						} else {
-							message = remoteValidate.message;
-						}
-						return message;
-					}
-				};
-				data.remoteValidate = remoteValidate;
+	addCustomValidityRule('ajaxvalidate', function(elem, val, data){
+		if(!val || !data.ajaxvalidate){return;}
+		var opts;
+		if(!data.remoteValidate){
+			webshims.loader.loadList(['jajax']);
+			if(typeof data.ajaxvalidate == 'string'){
+				data.ajaxvalidate = {url: data.ajaxvalidate, depends: $([])};
+			} else {
+				data.ajaxvalidate.depends = data.ajaxvalidate.depends ?
+					$(typeof data.ajaxvalidate.depends == 'string' && data.ajaxvalidate.depends.split(' ') || data.ajaxvalidate.depends).map(getId) :
+					$([])
+				;
 			}
-			
-			return data.remoteValidate.getTempMessage();
-		}, 'remote error');
-	}
+
+			data.ajaxvalidate.depends.on('change', function(){
+				if($(this).is(':valid')){
+					webshims.refreshCustomValidityRules(elem);
+				}
+			});
+
+			opts = data.ajaxvalidate;
+
+			var remoteValidate = {
+				ajaxLoading: false,
+				restartAjax: false,
+				message: 'async',
+				cache: {},
+				update: function(remoteData){
+					if(this.ajaxLoading){
+						this.restartAjax = remoteData;
+					} else {
+						this.restartAjax = false;
+						this.ajaxLoading = true;
+						$.ajax(
+							$.extend({dataType: 'json'}, opts, {
+								url: opts.url,
+								depData: remoteData,
+								data: formCFG.fullRemoteForm || opts.fullForm ?
+									$(elem).jProp('form').serializeArray() :
+									remoteData,
+								success: this.getResponse,
+								complete: this._complete,
+								timeout: 3000
+							})
+						);
+					}
+				},
+				_complete: function(){
+					remoteValidate.ajaxLoading = false;
+					if(remoteValidate.restartAjax){
+						this.update(remoteValidate.restartAjax);
+					}
+					remoteValidate.restartAjax = false;
+				},
+				getResponse: function(data){
+					if(options.transformAjaxValidate){
+						data = options.transformAjaxValidate(data);
+					}
+					if(!data){
+						data = {message: '', valid: true};
+					} else if(typeof data == 'string'){
+						try {
+							data = JSON.parse(data);
+						} catch (er){}
+					}
+
+					remoteValidate.message = ('message' in data) ? data.message : !data.valid;
+					remoteValidate.lastMessage = remoteValidate.message;
+					remoteValidate.blockUpdate = true;
+					$(elem).triggerHandler('updatevalidation.webshims');
+					remoteValidate.message = 'async';
+					remoteValidate.blockUpdate = false;
+				},
+				getData: function(){
+					var data;
+					data = {};
+					data[$.prop(elem, 'name') || $.prop(elem, 'id')] = $(elem).val();
+					opts.depends.each(function(){
+						if($(this).is(':invalid')){
+							data = false;
+							return false;
+						}
+						data[$.prop(this, 'name') || $.prop(this, 'id')] = $(this).val();
+					});
+					return data;
+				},
+				getTempMessage: function(){
+					var message = 'async';
+					var remoteData, dataStr;
+					if(!data.remoteValidate.blockUpdate){
+						remoteData = this.getData();
+						if(!remoteData){
+							message = '';
+						} else {
+							try {
+								dataStr = JSON.stringify(remoteData);
+							} catch(er){}
+
+							if(dataStr === this.lastString){
+								message = this.ajaxLoading ? 'async' : this.lastMessage;
+							} else {
+								this.lastString = dataStr;
+								this.lastMessage = 'async';
+								clearTimeout(data.remoteValidate.timer);
+								data.remoteValidate.timer = setTimeout(function(){
+									data.remoteValidate.update(remoteData);
+								}, 9);
+							}
+
+						}
+					} else {
+						message = remoteValidate.message;
+					}
+					return message;
+				}
+			};
+			data.remoteValidate = remoteValidate;
+		}
+
+		return data.remoteValidate.getTempMessage();
+	}, 'remote error');
 })();
 
 });

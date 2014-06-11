@@ -346,7 +346,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		});
 		return str.join('');
 	};
-	
+	var setJump = ('inputMode' in document.createElement('input')) || !((/ipad|iphone/i).test(navigator.userAgent));
 	var widgetProtos = {
 		_addBindings: function(){
 			var isFocused;
@@ -496,6 +496,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				'ws__input keydown keypress': (function(){
 					var timer;
 					var isStopped = false;
+
 					var releaseTab = function(){
 						if (isStopped === true) {
 							isStopped = 'semi';
@@ -561,7 +562,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				};
 			})();
 			
-			if(o.splitInput && o.jumpInputs == null){
+			if(o.splitInput && setJump && o.jumpInputs == null){
 				o.jumpInputs = true;
 			}
 			
@@ -955,7 +956,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		var enabled = 0;
 		var str = '';
 		var rowNum = 0;
-		var triggerValueValidation = (data.orig && ('valuevalidation' in $.data(data.orig)));
+		var triggerValueValidation = (data.orig && ('validatevalue' in $.data(data.orig)));
 
 		if(!data.options.useDecadeBase){
 			if(!max[0] && min[0]){
@@ -988,7 +989,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			for(i = 0; i < 12; i++){
 				val = start + i ;
 				classArray = [];
-				if( !picker.isInRange([val], max, min) || (triggerValueValidation && $(data.orig).triggerHandler('valuevalidation', [{value: val, valueAsDate: null, isPartial: [val]}]))){
+				if( !picker.isInRange([val], max, min) || (triggerValueValidation && $(data.orig).triggerHandler('validatevalue', [{value: val, valueAsDate: null, isPartial: [val]}]))){
 					disabled = ' disabled=""';
 				} else {
 					disabled = '';
@@ -1040,7 +1041,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		var rowNum = 0;
 		var str = '';
 		var action = data.type == 'month' ? 'changeInput' : 'setDayList' ;
-		var triggerValueValidation = (data.orig && ('valuevalidation' in $.data(data.orig)));
+		var triggerValueValidation = (data.orig && ('validatevalue' in $.data(data.orig)));
 		var isPartial = action != 'changeInput';
 		
 		value = value[0] - Math.floor((size - 1) / 2);
@@ -1075,7 +1076,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 				val = curCfg.date.monthkeys[i+1];
 				name = getMonthNameHTML(i);
 				classArray = [];
-				if(!picker.isInRange([value, val], max, min) || (triggerValueValidation  && $(data.orig).triggerHandler('valuevalidation', [{value: value+'-'+val, valueAsDate: data.asDate(value+'-'+val), isPartial: isPartial && [value, val]}]))){
+				if(!picker.isInRange([value, val], max, min) || (triggerValueValidation  && $(data.orig).triggerHandler('validatevalue', [{value: value+'-'+val, valueAsDate: data.asDate(value+'-'+val), isPartial: isPartial && [value, val]}]))){
 					disabled = ' disabled=""';
 				} else {
 					disabled = '';
@@ -1129,7 +1130,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		var str = [];
 		var date = new Date(value[0], value[1] - 1, 1);
 		var action = (data.type == 'datetime-local') ? 'setTimeList' : 'changeInput';
-		var triggerValueValidation = (data.orig && ('valuevalidation' in $.data(data.orig)));
+		var triggerValueValidation = (data.orig && ('validatevalue' in $.data(data.orig)));
 		var isPartial = action != 'changeInput';
 		
 		date.setMonth(date.getMonth()  - Math.floor((size - 1) / 2));
@@ -1246,7 +1247,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 					buttonStr += ' class="'+ classArray.join(' ') +'"';
 				}
 				
-				if(!picker.isInRange(dateArray, max, min) || (triggerValueValidation && $(data.orig).triggerHandler('valuevalidation', [{value: dateArray.join('-'), valueAsDate: date, isPartial: isPartial && dateArray}]))){
+				if(!picker.isInRange(dateArray, max, min) || (triggerValueValidation && $(data.orig).triggerHandler('validatevalue', [{value: dateArray.join('-'), valueAsDate: date, isPartial: isPartial && dateArray}]))){
 					buttonStr += ' disabled=""';
 				}
 				
@@ -1283,12 +1284,13 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 		var i = 0;
 		var rowNum = 0;
 		var len = 23;
+
 		var attrs = {
 			min: $.prop(data.orig, 'min'),
 			max: $.prop(data.orig, 'max'),
 			step: $.prop(data.orig, 'step')
 		};
-		var triggerValueValidation = (data.orig && ('valuevalidation' in $.data(data.orig)));
+		var triggerValueValidation = (data.orig && ('validatevalue' in $.data(data.orig)));
 		var gridLabel = '';
 		
 		if(data.type == 'time'){
@@ -1321,13 +1323,14 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 			}
 			str += '<td role="presentation"><button role="gridcell" data-action="changeInput" value="'+ hVal +'" type="button" tabindex="-1"';
 			
-			if(!data.isValid(hVal, attrs) || (triggerValueValidation && $(data.orig).triggerHandler('valuevalidation', [{value: hVal, valueAsDate: data.asDate(hVal), partial: false}]))){
+			if(!data.isValid(hVal, attrs) || (triggerValueValidation && $(data.orig).triggerHandler('validatevalue', [{value: hVal, valueAsDate: data.asDate(hVal), partial: false}]))){
 				str += ' disabled=""';
 			}
 			if(value == iVal){
 				str += ' class="checked-value"';
 			}
-			str += '>'+ data.formatValue(iVal) +'</button></td>';
+
+			str += '>'+ webshims._format.time(iVal) +'</button></td>';
 		}
 		
 		
@@ -1561,7 +1564,7 @@ webshims.register('forms-picker', function($, webshims, window, document, undefi
 						}
 
 						if(today[data.type] && data.type != 'time'){
-							$.prop(this, 'disabled', (!picker.isInRange(today[data.type].split('-'), o.maxS, o.minS) || !!$(data.orig).triggerHandler('valuevalidation', [{value: today[data.type], valueAsDate: new Date(), isPartial: false}])));
+							$.prop(this, 'disabled', (!picker.isInRange(today[data.type].split('-'), o.maxS, o.minS) || !!$(data.orig).triggerHandler('validatevalue', [{value: today[data.type], valueAsDate: new Date(), isPartial: false}])));
 						}
 					}
 					if(text){

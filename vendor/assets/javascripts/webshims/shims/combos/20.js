@@ -1628,8 +1628,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		});
 		return this;
 	};
-	
-	var dataID = '_webshimsLib'+ (Math.round(Math.random() * 1000));
+	var idCount = 0;
+	var dataID = '_webshims'+ (Math.round(Math.random() * 1000));
 	var elementData = function(elem, key, val){
 		elem = elem.jquery ? elem[0] : elem;
 		if(!elem){return val || {};}
@@ -1660,6 +1660,35 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			return this.pushStack(elems);
 		};
 	});
+
+	function clone(elem, dataAndEvents, uniqueIds){
+		var cloned = $.clone( elem, dataAndEvents, false );
+		$(cloned.querySelectorAll('.'+webshims.shadowClass)).detach();
+		if(uniqueIds){
+			idCount++;
+			$(cloned.querySelectorAll('[id]')).prop('id', function(i, id){
+				return id +idCount;
+			});
+		} else {
+			$(cloned.querySelectorAll('audio[id^="ID-"], video[id^="ID-"], label[id^="ID-"]')).removeAttr('id');
+		}
+		return cloned;
+	}
+
+	$.fn.clonePolyfill = function(dataAndEvents, uniqueIds){
+		dataAndEvents = dataAndEvents || false;
+		return this
+			.map(function() {
+				var cloned = clone( this, dataAndEvents, uniqueIds );
+				setTimeout(function(){
+					if($.contains(document.body, cloned)){
+						$(cloned).updatePolyfill();
+					}
+				});
+				return cloned;
+			})
+		;
+	};
 	
 	//add support for $('video').trigger('play') in case extendNative is set to false
 	if(!webshims.cfg.extendNative && !webshims.cfg.noTriggerOverride){
@@ -1971,6 +2000,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
+		shadowClass: 'wsshadow-'+(Date.now()),
 		implement: function(elem, type){
 			var data = elementData(elem, 'implemented') || elementData(elem, 'implemented', {});
 			if(data[type]){
@@ -3866,7 +3896,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			resetSwfProps(data);
 		} else {
 			$(document.getElementById('wrapper-'+ elemId )).remove();
-			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
+			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement '+ webshims.shadowClass +'" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
 				.css({
 					position: 'relative',
 					overflow: 'hidden'

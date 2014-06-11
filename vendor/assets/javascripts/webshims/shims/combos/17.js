@@ -1286,6 +1286,8 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			;
 		}
 	};
+	var numericType = Modernizr.inputtypes.tel && navigator.userAgent.indexOf('Mobile') != -1 && !('inputMode' in document.createElement('input') && !('inputmode' in document.createElement('input'))) ?
+		'tel' : 'text';
 	var splitInputs = {
 		date: {
 			_create: function(opts){
@@ -1296,18 +1298,18 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				if(opts.yearSelect){
 					obj.splits.push($('<select class="yy"></select>')[0]);
 				} else {
-					obj.splits.push($('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
+					obj.splits.push($('<input type="'+ numericType +'" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
 				}
 				
 				if(opts.monthSelect){
 					obj.splits.push($('<select class="mm">'+getMonthOptions(opts)+'</select>')[0]);
 				} else {
-					obj.splits.push($('<input type="text" class="mm" inputmode="numeric" maxlength="2" size="2" />')[0]);
+					obj.splits.push($('<input type="'+ numericType +'" class="mm" inputmode="numeric" maxlength="2" size="2" />')[0]);
 				}
 				if(opts.daySelect){
 					obj.splits.push($(daySelect)[0]);
 				} else {
-					obj.splits.push($('<input type="text" class="dd ws-spin" inputmode="numeric" maxlength="2" size="2" />')[0]);
+					obj.splits.push($('<input type="'+ numericType +'" class="dd ws-spin" inputmode="numeric" maxlength="2" size="2" />')[0]);
 				}
 				
 				obj.elements = [obj.splits[0], $('<span class="ws-input-seperator" />')[0], obj.splits[1], $('<span class="ws-input-seperator" />')[0], obj.splits[2]];
@@ -1342,7 +1344,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				if(opts.yearSelect){
 					obj.splits.push($('<select class="yy"></select>')[0]);
 				} else {
-					obj.splits.push($('<input type="text" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
+					obj.splits.push($('<input type="'+ numericType +'" class="yy" size="4" inputmode="numeric" maxlength="4" />')[0]);
 				}
 				
 				if(opts.monthSelect){
@@ -1350,7 +1352,10 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				} else {
 					obj.splits.push($('<input type="text" class="mm ws-spin" />')[0]);
 					if(opts.onlyMonthDigits){
-						$(obj.splits[1]).attr({inputmode: 'numeric', size: 2, maxlength: 2});
+						$().attr({inputmode: 'numeric', size: 2, maxlength: 2});
+						try {
+							obj.splits[1].setAttribute('type', numericType);
+						} catch(e){}
 					}
 				}
 				
@@ -1373,7 +1378,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			}
 		}
 	};
-	
+
 	var nowDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60 * 1000 ));
 	var nowYear = nowDate.getFullYear();
 	nowDate = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate(), nowDate.getHours()).getTime();
@@ -2193,7 +2198,11 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				} else if(!isNaN(this.maxAsNumber) && start > this.maxAsNumber){
 					start = this.maxAsNumber;
 				}
-				this.elemHelper.prop('valueAsNumber', start);
+				try {
+					this.elemHelper.prop('valueAsNumber', start);
+				} catch(e){
+					webshims.warn('valueAsNumber set: '+e);
+				}
 				this.options.defValue = this.elemHelper.prop('value');
 			},
 			reorderInputs: function(){
@@ -2217,7 +2226,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			_beforeValue: function(val){
 				this.valueAsNumber = this.asNumber(val);
 				this.options.value = val;
-				
+
 				if(isNaN(this.valueAsNumber) || (!isNaN(this.minAsNumber) && this.valueAsNumber < this.minAsNumber) || (!isNaN(this.maxAsNumber) && this.valueAsNumber > this.maxAsNumber)){
 					this._setStartInRange();
 				} else {
@@ -2333,9 +2342,9 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				touchEnd = function(e){
 					var ret, touch;
 					e = e.originalEvent || {};
-					$(this).off('touchend', touchEnd);
+					$(this).off('touchend touchcancel', touchEnd);
 					var changedTouches = e.changedTouches || e.touches;
-					if(!touchData || !changedTouches || changedTouches.length != 1){
+					if(e.type == 'touchcancel' || !touchData || !changedTouches || changedTouches.length != 1){
 						return;
 					}
 
@@ -2366,7 +2375,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						y: touch.pageY,
 						now: Date.now()
 					};
-					elemTarget.on('touchend', touchEnd);
+					elemTarget.on('touchend touchcancel', touchEnd);
 				};
 
 				this.each(function(){
@@ -2480,7 +2489,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			cancel: function(val, popover, data){
 				if(!data.options.inlinePicker){
 					popover.stopOpen = true;
-					if(assumeVirtualKeyBoard){
+					if(!popover.openedByFocus && assumeVirtualKeyBoard){
 						$('button', data.buttonWrapper).trigger('focus');
 					} else {
 						data.element.getShadowFocusElement().trigger('focus');
@@ -2580,14 +2589,6 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			var popover = webshims.objectCreate(options.inlinePicker ? webshims.inlinePopover : webshims.wsPopover, {}, $.extend(options.popover || {}, {prepareFor: options.inlinePicker ? data.buttonWrapper : data.element}));
 			var opener = $('<button type="button" class="ws-popover-opener"><span /></button>').appendTo(data.buttonWrapper);
 			
-			if(options.widgetPosition){
-				webshims.error('options.widgetPosition was removed use options.popover.position instead');
-			}
-			
-			if(options.openOnFocus && popover.options && (popover.options.appendTo == 'auto' || popover.options.appendTo == 'element')){
-				webshims.error('openOnFocus and popover.appendTo "auto/element" can prduce a11y problems try to change appendTo to body or similiar or use openOnMouseFocus instead');
-			}
-			
 			var showPickerContent = function(){
 				(picker[data.type].showPickerContent || picker.showPickerContent)(data, popover);
 			};
@@ -2656,9 +2657,28 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 							stopPropagation.apply(this, arguments);
 							popover.preventBlur();
 						},
-						focus: function(){
-							popover.preventBlur();
-						}
+						keydown: function(e){
+							if(e.keyCode == 40 && e.altKey){
+								open();
+							}
+						},
+						'focus mousedown': (function(){
+							var allowClose = true;
+							var reset = function(){
+								allowClose = true;
+							};
+							return function(e){
+								if(e.type  == 'mousedown'){
+									allowClose = false;
+									setTimeout(reset);
+								}
+								if(e.type == 'focus' && allowClose && options.openOnFocus && popover.openedByFocus && (popover.options.appendTo == 'auto' || popover.options.appendTo == 'element')){
+									popover.hide();
+								} else {
+									popover.preventBlur();
+								}
+							};
+						})()
 					})
 				;
 				
@@ -2905,6 +2925,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				}
 
 			};
+			oriStyleO.webkitAppearance = 'none';
 			data.element.onWSOff('updateshadowdom', updateStyles, true);
 		};
 		
@@ -2912,13 +2933,14 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		var implementType = function(){
 			
 			var type = $.prop(this, 'type');
-			
 			var i, opts, data, optsName, labels, cNames, hasInitialFocus;
-			if(inputTypes[type] && webshims.implement(this, 'inputwidgets')){
+
+			if(inputTypes[type] && webshims.implement(this, 'inputwidgets') && (!modernizrInputTypes[type] || !$(this).hasClass('ws-noreplace'))){
 				data = {};
 				optsName = type;
 				hasInitialFocus = $(this).is(':focus');
 				labels = $(this).jProp('labels');
+
 				opts = $.extend(webshims.getOptions(this, type, [options.widgets, options[type], $($.prop(this, 'form')).data(type)]), {
 					orig: this,
 					type: type,
@@ -2951,6 +2973,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						opts[optsName] = $.attr(this, copyAttrs[i]) || opts[optsName];
 					}
 				}
+
 				if(opts.formatMonthNames){
 					webshims.error('formatMonthNames was renamded to monthNames');
 				}
@@ -2974,11 +2997,11 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 					cNames = cNames.replace('form-control', '');
 				}
 				
-				data.shim.element.on('change input', stopPropagation).addClass(cNames);
+				data.shim.element.on('change input', stopPropagation).addClass(cNames+' '+webshims.shadowClass);
 				
 				if(data.shim.buttonWrapper){
 					
-					data.shim.buttonWrapper.addClass('input-button-size-'+(data.shim.buttonWrapper.children().filter(isVisible).length));
+					data.shim.buttonWrapper.addClass('input-button-size-'+(data.shim.buttonWrapper.children().filter(isVisible).length)+' '+webshims.shadowClass);
 					
 					if(data.shim.buttonWrapper.filter(isVisible).length){
 						data.shim.element.addClass('has-input-buttons');

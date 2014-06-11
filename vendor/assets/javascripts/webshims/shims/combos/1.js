@@ -365,6 +365,8 @@ webshims.isReady('swfmini', true);
 	addModule('form-validation', $.extend({d: ['form-message']}, formExtras));
 
 	addModule('form-validators', $.extend({}, formExtras));
+
+
 	
 	if($.expr.filters){
 		extendSels();
@@ -486,12 +488,21 @@ webshims.isReady('swfmini', true);
 
 	$.event.special.valuevalidation = {
 		setup: function(){
+			webshims.error('valuevalidation was renamed to validatevalue!');
+		}
+	};
+
+
+	$.event.special.validatevalue = {
+		setup: function(){
 			var data = $(this).data() || $.data(this, {});
-			if(!('valuevalidation' in data)){
-				data.valuevalidation = true;
+			if(!('validatevalue' in data)){
+				data.validatevalue = true;
 			}
 		}
 	};
+
+
 	
 	$(document).on('focusin.lazyloadvalidation', function(e){
 		if('form' in e.target){
@@ -504,6 +515,26 @@ webshims.isReady('swfmini', true);
 	if(modules['form-number-date-ui'].loaded && !options.customMessages && (modules['form-number-date-api'].test() || (Modernizr.inputtypes.range && Modernizr.inputtypes.color))){
 		webshims.isReady('form-number-date-ui', true);
 	}
+
+	webshims.ready('DOM', function(){
+		if(document.querySelector('.ws-custom-file')){
+			webshims.reTest(['form-validation']);
+		}
+	});
+
+	$(function(){
+		var fileReaderReady = ('FileReader' in window && 'FormData' in window);
+		if(!fileReaderReady){
+			webshims.addReady(function(context){
+				if(!fileReaderReady && !modules.filereader.loaded && !modules.moxie.loaded){
+					if(context.querySelector('input.ws-filereader')){
+						webshims.reTest(['filereader', 'moxie']);
+						fileReaderReady = true;
+					}
+				}
+			});
+		}
+	});
 });
 ;(function(Modernizr, webshims){
 	"use strict";

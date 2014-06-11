@@ -1,3 +1,10 @@
+.ws-custom-file {
+  zoom: 1; }
+  .ws-custom-file:before, .ws-custom-file:after {
+    display: table;
+    clear: both;
+    content: ' '; }
+
 .ws-popover, .ws-range .ws-range-thumb, .ws-inline-picker,
 div.ws-inline-picker {
   -moz-box-sizing: content-box;
@@ -18,6 +25,28 @@ div.ws-inline-picker {
   visibility: hidden !important;
   position: absolute;
   top: -999999px; }
+
+.ws-po-box button, .ws-custom-file > button {
+  display: inline-block;
+  overflow: visible;
+  position: relative;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-size: inherit;
+  line-height: inherit;
+  touch-action: none; }
+  .ws-po-box button::-moz-focus-inner, .ws-custom-file > button::-moz-focus-inner {
+    border: 0;
+    padding: 0; }
+  .ws-po-box button[disabled], .ws-custom-file > button[disabled] {
+    cursor: default;
+    color: #888; }
 
 [hidden] {
   display: none; }
@@ -248,25 +277,6 @@ output {
   padding: 0.38462em 0.38462em 0.23077em;
   border-radius: 0.23077em;
   box-shadow: 0 0.07692em 0.38462em rgba(0, 0, 0, 0.25); }
-  .ws-po-box button {
-    display: inline-block;
-    overflow: visible;
-    position: relative;
-    margin: 0;
-    border: 0;
-    padding: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    font-family: inherit;
-    background: transparent;
-    cursor: pointer;
-    touch-action: none; }
-    .ws-po-box button::-moz-focus-inner {
-      border: 0;
-      padding: 0; }
-    .ws-po-box button[disabled] {
-      cursor: default;
-      color: #888; }
 
 .ws-po-arrow {
   position: absolute;
@@ -537,6 +547,75 @@ summary.summary-has-focus {
   outline: 1px dotted #aaa;
   outline-offset: -1px; }
 
+.ws-custom-file {
+  position: relative;
+  zoom: 1; }
+  .ws-custom-file > button,
+  .ws-custom-file > input {
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    cursor: pointer; }
+  .ws-custom-file > button,
+  .ws-custom-file > .ws-file-value {
+    position: relative;
+    z-index: 0;
+    display: inline-block;
+    padding: 5px;
+    border: 1px solid #ccc;
+    background: #eee;
+    color: #333;
+    transition: 400ms all; }
+  .ws-custom-file > button {
+    margin-right: 0.4em;
+    float: left; }
+  .ws-custom-file .ws-file-value {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis; }
+  .ws-custom-file:hover > button, .ws-custom-file.ws-mouseenter > button,
+  .ws-custom-file > input[type="file"]:focus ~ button {
+    background: #fff;
+    border-color: #999;
+    background: #eeeeee linear-gradient(transparent, rgba(0, 0, 0, 0.05) 40%, rgba(0, 0, 0, 0.1)); }
+  .ws-custom-file:hover > .ws-file-value, .ws-custom-file.ws-mouseenter > .ws-file-value,
+  .ws-custom-file > input[type="file"]:focus ~ .ws-file-value {
+    border-color: #999; }
+  .ws-custom-file.ws-active > button,
+  .ws-custom-file > input[type="file"]:active ~ button {
+    border-color: #000; }
+  .ws-custom-file.ws-active > .ws-file-value,
+  .ws-custom-file > input[type="file"]:active ~ .ws-file-value {
+    border-color: #000; }
+  .ws-custom-file > input[type="file"][disabled] ~ .ws-file-value,
+  .ws-custom-file > input[type="file"][disabled] ~ button {
+    border-color: #bbb;
+    background: #eee;
+    color: #999; }
+  .ws-custom-file > input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    height: 100%;
+    width: 100%;
+    filter: alpha(opacity=0);
+    opacity: 0.00001;
+    z-index: 9; }
+    .ws-custom-file > input[type="file"][disabled] {
+      cursor: default;
+      cursor: not-allowed; }
+  .ws-custom-file > .moxie-shim {
+    z-index: 20; }
+
+.ws-custom-file {
+  zoom: 1; }
+  .ws-custom-file:before, .ws-custom-file:after {
+    display: table;
+    clear: both;
+    content: ' '; }
+
 .ws-popover, .ws-range .ws-range-thumb, .ws-inline-picker,
 div.ws-inline-picker {
   -moz-box-sizing: content-box;
@@ -662,7 +741,7 @@ SASS:
 
 @font-face {
   font-family: 'widget';
-  src: url("fonts/widget.eot"); }
+  src: url("widget.eot"); }
 @font-face {
   font-family: 'widget';
   src: url(data:application/font-woff;charset=utf-8;base64,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) format("woff"), url("widget.ttf") format("truetype");
@@ -730,7 +809,12 @@ span.has-input-buttons {
   cursor: pointer;
   background: #ccc;
   font-size: 13px;
-  text-align: center; }
+  text-align: center;
+  outline-offset: -2px; }
+  .ws-popover-opener:focus, .ws-popover-opener:active {
+    outline: 1px dotted #666; }
+  .ws-popover-opener:hover {
+    outline: none; }
   .ws-is-rtl .ws-popover-opener {
     margin: 0 2px 0 0; }
   .ws-popover-opener span {

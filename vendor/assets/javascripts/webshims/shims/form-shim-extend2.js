@@ -196,7 +196,7 @@ webshims.register('form-shim-extend2', function($, webshims, window, document, u
 						value = !!value;
 
 						if(value){
-							$(disableElementsSel, this).each(groupControl.disable);
+							$(this.querySelectorAll(disableElementsSel)).each(groupControl.disable);
 						} else if(!$(this).is('fieldset[disabled] *')){
 							var elements = $(this.querySelectorAll(disableElementsSel));
 
@@ -255,6 +255,7 @@ webshims.register('form-shim-extend2', function($, webshims, window, document, u
 					var isForm = {form: 1, FORM: 1};
 					$.prop = function(elem, name, value){
 						var ret;
+						//TODO: cache + perftest
 						if(elem && elem.nodeType == 1 && value === undefined && isForm[elem.nodeName] && elem.id){
 							ret = document.getElementsByName(name);
 							if(!ret || !ret.length){
@@ -281,18 +282,19 @@ webshims.register('form-shim-extend2', function($, webshims, window, document, u
 					}
 				};
 
+				var getAssociatedForm = function () {
+					var form = webshims.contentAttr(this, 'form');
+					if(form){
+						form = document.getElementById(form);
+						if(form && !$.nodeName(form, 'form')){
+							form = null;
+						}
+					}
+					return form || this.form;
+				};
 				webshims.defineNodeNamesProperty(['input', 'textarea', 'select', 'button', 'fieldset'], 'form', {
 					prop: {
-						get: function(){
-							var form = webshims.contentAttr(this, 'form');
-							if(form){
-								form = document.getElementById(form);
-								if(form && !$.nodeName(form, 'form')){
-									form = null;
-								}
-							}
-							return form || this.form;
-						},
+						get: getAssociatedForm,
 						writeable: false
 					}
 				});
@@ -300,14 +302,30 @@ webshims.register('form-shim-extend2', function($, webshims, window, document, u
 				webshims.defineNodeNamesProperty(['form'], 'elements', {
 					prop: {
 						get: function(){
-							var sel, addElements, detachElements;
+							//TODO: cache + perftest
+							var sel, addElements, detachElements, formElements, i, len;
 							var id = this.id;
-							var elements = $.makeArray(this.elements);
+							var elements = [];
 							if(id){
 								detachElements = $.data(this, 'webshimsAddedElements');
 								if(detachElements){
 									detachElements.detach();
 								}
+							}
+
+							formElements = this.elements;
+
+							if(this.querySelector('input[form], select[form], textarea[form]')){
+								for(i = 0, len = formElements.length; i < len; i++){
+									if(getAssociatedForm.call(formElements[i]) == this){
+										elements.push(formElements[i]);
+									}
+								}
+							} else {
+								elements = $.makeArray(formElements);
+							}
+
+							if(id){
 								sel = 'input[form="'+ id +'"], select[form="'+ id +'"], textarea[form="'+ id +'"], button[form="'+ id +'"], fieldset[form="'+ id +'"]';
 								addElements = document.querySelectorAll(sel) || [];
 								if(addElements.length){
@@ -1036,8 +1054,21 @@ webshims.register('form-shim-extend2', function($, webshims, window, document, u
 						return ret;
 					},
 					get: function(){
+						var placeholder;
 						var elem = this;
-						return $(elem).hasClass('placeholder-visible') ? '' : desc[propType]._supget.call(elem);
+						var curValue;
+
+						if($(elem).hasClass('placeholder-visible')){
+							if(webshims.cfg.debug && (curValue = desc[propType]._supget.call(elem)) && (placeholder = $.attr(elem, 'placeholder')) && placeholder !=  curValue){
+								webshims.error('value input[placeholder] was changed by input.value instead using $.val or $.prop.');
+								changePlaceholderVisibility(elem, curValue, placeholder);
+							} else {
+								curValue = '';
+							}
+						} else {
+							curValue = desc[propType]._supget.call(elem);
+						}
+						return curValue;
 					}
 				};
 			});

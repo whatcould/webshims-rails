@@ -116,7 +116,7 @@
 	path = path.split('?')[0].slice(0, path.lastIndexOf("/") + 1) + 'shims/';
 
 	$.extend(webshims, {
-		version: '1.13.0',
+		version: '1.14.1',
 		cfg: {
 			enhanceAuto: window.Audio && (!window.matchMedia || matchMedia('(min-device-width: 721px)').matches),
 			//addCacheBuster: false,
@@ -253,6 +253,9 @@
 			}
 			
 			$.each(features, function(i, feature){
+				if(feature == 'xhr2'){
+					feature = 'filereader';
+				}
 				if(!webshimsFeatures[feature]){
 					WSDEBUG && webshims.error("could not find webshims-feature (aborted): "+ feature);
 					isReady(feature, true);
@@ -607,7 +610,7 @@
 	/*
 	 * shortcuts
 	 */
-	$.webshims = webshims;
+
 	
 	var webCFG = webshims.cfg;
 	var webshimsFeatures = webshims.features;
@@ -624,6 +627,7 @@
 		warn: 1,
 		error: 1
 	};
+	var $fn = $.fn;
 	
 	webshims.addMethodName = function(name){
 		name = name.split(':');
@@ -635,12 +639,12 @@
 			name = name[0];
 		}
 		
-		$.fn[name] = function(){
+		$fn[name] = function(){
 			return this.callProp(prop, arguments);
 		};
 	};
 
-	$.fn.callProp = function(prop, args){
+	$fn.callProp = function(prop, args){
 		var ret;
 		if(!args){
 			args = []; 
@@ -810,23 +814,28 @@
 				});
 			}
 		});
-		
-		$.fn.htmlPolyfill = function(a){
-			var ret = $.fn.html.call(this,  a);
+
+		$fn.clonePolyfill = $fn.clone;
+
+		$fn.htmlPolyfill = function(a){
+			if(!arguments.length){
+				return $(this.clonePolyfill()).html();
+			}
+			var ret = $fn.html.call(this,  a);
 			if(ret === this && $.isDOMReady){
 				this.each(eachTrigger);
 			}
 			return ret;
 		};
 		
-		$.fn.jProp = function(){
-			return this.pushStack($($.fn.prop.apply(this, arguments) || []));
+		$fn.jProp = function(){
+			return this.pushStack($($fn.prop.apply(this, arguments) || []));
 		};
 		
 		$.each(['after', 'before', 'append', 'prepend', 'replaceWith'], function(i, name){
-			$.fn[name+'Polyfill'] = function(a){
+			$fn[name+'Polyfill'] = function(a){
 				a = $(a);
-				$.fn[name].call(this, a);
+				$fn[name].call(this, a);
 				if($.isDOMReady){
 					a.each(eachTrigger);
 				}
@@ -836,8 +845,8 @@
 		});
 		
 		$.each(['insertAfter', 'insertBefore', 'appendTo', 'prependTo', 'replaceAll'], function(i, name){
-			$.fn[name.replace(/[A-Z]/, function(c){return "Polyfill"+c;})] = function(){
-				$.fn[name].apply(this, arguments);
+			$fn[name.replace(/[A-Z]/, function(c){return "Polyfill"+c;})] = function(){
+				$fn[name].apply(this, arguments);
 				if($.isDOMReady){
 					webshims.triggerDomUpdate(this);
 				}
@@ -845,7 +854,7 @@
 			};
 		});
 		
-		$.fn.updatePolyfill = function(){
+		$fn.updatePolyfill = function(){
 			if($.isDOMReady){
 				webshims.triggerDomUpdate(this);
 			}
@@ -853,7 +862,7 @@
 		};
 		
 		$.each(['getNativeElement', 'getShadowElement', 'getShadowFocusElement'], function(i, name){
-			$.fn[name] = function(){
+			$fn[name] = function(){
 				return this.pushStack(this);
 			};
 		});
@@ -900,7 +909,7 @@
 			}
 			return ('swfmini' in window);
 		},
-		c: [16, 7, 2, 8, 1, 12, 19, 25, 23, 27]
+		c: [16, 7, 2, 8, 1, 12, 19, 23]
 	});
 	modules.swfmini.test();
 	
@@ -913,7 +922,7 @@
 	// webshims lib uses a of http://github.com/kriskowal/es5-shim/ to implement
 	addPolyfill('es5', {
 		test: !!(Modernizr.ES5 && Function.prototype.bind),
-		c: [18, 19, 25, 20, 32],
+		c: [18, 19, 20, 32],
 		d: ['sizzle']
 	});
 	
@@ -921,7 +930,7 @@
 		f: DOMSUPPORT,
 		noAutoCallback: true,
 		d: ['es5'],
-		c: [16, 7, 2, 15, 30, 3, 8, 4, 9, 10, 25, 19, 20, 26, 31, 34]
+		c: [16, 7, 2, 15, 30, 3, 8, 4, 9, 10, 19, 25, 20, 31, 34]
 	});
 
 	document.createElement('picture');
@@ -981,6 +990,7 @@
 		var fNuAPI = 'form-number-date-api';
 		var bustedValidity = false;
 		var bustedWidgetUi = false;
+		var replaceBustedUI = false;
 		
 		var initialFormTest = function(){
 			var tmp, fieldset;
@@ -1004,6 +1014,7 @@
 				
 				if(Modernizr[formvalidation]){
 					bustedWidgetUi = !Modernizr.fieldsetdisabled ||!Modernizr.fieldsetelements || !('value' in document.createElement('progress')) || !('value' in document.createElement('output'));
+					replaceBustedUI = bustedWidgetUi && (/Android/i).test(navigator.userAgent);
 					bugs.bustedValidity = bustedValidity = window.opera || bugs.bustedValidity || bustedWidgetUi || !modernizrInputAttrs.list;
 				} else {
 					bugs.bustedValidity = false;
@@ -1079,7 +1090,8 @@
 			test: function(){
 				return Modernizr[formvalidation] && !bustedWidgetUi;
 			},
-			d: [fShim]
+			d: [fShim],
+			c: [27]
 		});
 		
 		addPolyfill('form-message', {
@@ -1124,7 +1136,7 @@
 			options: {},
 			noAutoCallback: true,
 			test: function(){
-				return !!$.fn.rangeUI;
+				return !!$fn.rangeUI;
 			},
 			d: ['es5'],
 			c: [6, 5, 9, 10, 18, 17, 11]
@@ -1139,7 +1151,7 @@
 				o.replaceUI = getAutoEnhance(o.replaceUI);
 
 				//input widgets on old androids can't be trusted
-				if(bustedWidgetUi && !o.replaceUI && (/Android/i).test(navigator.userAgent)){
+				if(!o.replaceUI && replaceBustedUI){
 					o.replaceUI = true;
 				}
 				return !o.replaceUI && modules[fNuAPI].test();
@@ -1159,6 +1171,9 @@
 			f: 'forms',
 			test: function(){
 				initialFormTest();
+				if(replaceBustedUI){
+					formOptions.customDatalist = true;
+				}
 				return modernizrInputAttrs.list && !formOptions.fD;
 			},
 			d: ['form-core', DOMSUPPORT],
@@ -1168,11 +1183,14 @@
 	//>
 	
 	//<filereader
+	webshim.loader.addModule('moxie', {
+		src: 'moxie/js/moxie',
+		c: [26]
+	});
 	addPolyfill('filereader', {
-		test: 'FileReader' in window,
-		d: ['swfmini', DOMSUPPORT],
+		test: 'FileReader' in window && 'FormData' in window,
+		d: [DOMSUPPORT, 'jajax'],
 		c: [25, 26, 27]
-//		,nM: 'filereader'
 	});
 	//>
 	
@@ -1218,7 +1236,7 @@
 			},
 			methodNames: ['play', 'pause', 'canPlayType', 'mediaLoad:load'],
 			d: ['swfmini'],
-			c: [16, 7, 2, 8, 1, 12, 13, 19, 25, 20, 23],
+			c: [16, 7, 2, 8, 1, 12, 13, 19, 20, 23],
 			nM: 'audio video'
 		});
 		
@@ -1295,7 +1313,8 @@
 	
 	webshims.$ = $;
 	webshims.M = Modernizr;
-	window.webshims = webshims;
+	$.webshims = webshims;
+	$.webshim = webshim;
 
 	webshims.callAsync = function(){
 		webshims.callAsync = $.noop;
