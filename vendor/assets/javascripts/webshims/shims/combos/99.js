@@ -454,7 +454,7 @@ webshims.register('jme', function($, webshims, window, doc, undefined){
 			try {
 				audio = new Audio();
 				audio.volume = 0.55;
-				ret = ﻿((Math.round(audio.volume * 100) / 100) == 0.55) ? '' : ' no-volume-api';
+				ret = ((Math.round(audio.volume * 100) / 100) == 0.55) ? '' : ' no-volume-api';
 			} catch(e){}
 
 		}
