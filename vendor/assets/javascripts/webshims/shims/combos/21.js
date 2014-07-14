@@ -338,7 +338,8 @@
 	
 	var mediaelement = webshims.mediaelement;
 	var swfmini = window.swfmini;
-	var hasNative = Modernizr.audio && Modernizr.video;
+	var support = webshims.support;
+	var hasNative = support.mediaelement;
 	var hasFlash = swfmini.hasFlashPlayerVersion('9.0.115');
 	var loadedSwf = 0;
 	var needsLoadPreload = 'ActiveXObject' in window && hasNative;
@@ -387,9 +388,11 @@
 		_bufferedEnd: 0,
 		_bufferedStart: 0,
 		currentTime: 0,
+		lastCalledTime: -500,
 		_ppFlag: undefined,
 		_calledMeta: false,
-		lastDuration: 0
+		lastDuration: 0,
+		_timeDif: 0.3
 	}, getProps, getSetProps);
 	
 	
@@ -400,7 +403,7 @@
 			return null;
 		}
 		var data = webshims.data(elem, 'mediaelement');
-		return (data && data.isActive== 'third') ? data : null;
+		return (data && data.isActive == 'third') ? data : null;
 	};
 	
 	var trigger = function(elem, evt){
@@ -531,6 +534,14 @@
 				if(!data._calledMeta){
 					trigger(data._elem, 'loadedmetadata');
 				}
+
+				if(data.duration > 1 && data.duration < 140){
+					data._timeDif = 0.2;
+				} else if(data.duration < 600) {
+					data._timeDif = 0.25;
+				} else {
+					data._timeDif = 0.30;
+				}
 			}
 			data._calledMeta = true;
 		},
@@ -542,6 +553,7 @@
 			trigger(data._elem, 'waiting');
 		},
 		onTimeUpdate: function(jaris, data){
+			var timeDif = data.currentTime - data.lastCalledTime;
 			if(data.ended){
 				data.ended = false;
 			}
@@ -552,7 +564,12 @@
 			if(data.seeking){
 				callSeeked(data);
 			}
-			trigger(data._elem, 'timeupdate');
+
+			if(timeDif > data._timeDif || timeDif < -0.3){
+				data.lastCalledTime = data.currentTime;
+				$.event.trigger('timeupdate', undefined, data._elem, true);
+			}
+			
 		},
 		onProgress: function(jaris, data){
 			if(data.ended){
@@ -562,10 +579,12 @@
 				return;
 			}
 			var percentage = jaris.loaded / jaris.total;
+			
 			if(percentage > 0.02 && percentage < 0.2){
 				setReadyState(3, data);
 			} else if(percentage > 0.2){
-				if(percentage > 0.99){
+				if(percentage > 0.95){
+					percentage = 1;
 					data.networkState = 1;
 				}
 				setReadyState(4, data);
@@ -707,7 +726,7 @@
 			play: 1,
 			playing: 1
 		};
-		var hideEvtArray = ['play', 'pause', 'playing', 'canplay', 'progress', 'waiting', 'ended', 'loadedmetadata', 'durationchange', 'emptied'];
+		var hideEvtArray = ['play', 'pause', 'playing', 'loadstart', 'canplay', 'progress', 'waiting', 'ended', 'loadedmetadata', 'durationchange', 'emptied'];
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
@@ -767,7 +786,7 @@
 	
 	
 	var resetSwfProps = (function(){
-		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'seeking', 'videoHeight', 'videoWidth'];
+		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', 'lastCalledTime', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'seeking', 'videoHeight', 'videoWidth'];
 		var len = resetProtoProps.length;
 		return function(data){
 			
@@ -887,7 +906,7 @@
 						ret.height = ret.width / ratio;
 						
 					}
-					if(!Modernizr.video){
+					if(!webshims.support.mediaelement){
 						ret.width = data.shadowElem.width();
 						ret.height = data.shadowElem.height();
 					}
@@ -1026,7 +1045,7 @@
 		if(data && data.swfCreated){
 			mediaelement.setActive(elem, 'third', data);
 			
-			data.currentSrc = canPlaySrc.srcProp;
+			data.currentSrc = '';
 			
 			data.shadowElem.html('<div id="'+ elemId +'">');
 			
@@ -1034,6 +1053,8 @@
 			data.actionQueue = [];
 			box = data.shadowElem;
 			resetSwfProps(data);
+			data.currentSrc = canPlaySrc.srcProp;
+
 		} else {
 			$(document.getElementById('wrapper-'+ elemId )).remove();
 			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement '+ webshims.shadowClass +'" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
@@ -1144,7 +1165,7 @@
 					}
 				} else {
 					data.currentTime = jaris.position;
-					
+
 					if(data.api){
 						if(!data._calledMeta && isNaN(jaris.duration) && data.duration != jaris.duration && isNaN(data.duration)){
 							onEvent.onDataInitialized(jaris, data);
@@ -1219,7 +1240,8 @@
 				}
 			}
 		});
-		
+
+		trigger(data._elem, 'loadstart');
 	};
 	
 	
@@ -1387,7 +1409,7 @@
 		
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
 		
-		if(!Modernizr.mediaDefaultMuted){
+		if(!support.mediaDefaultMuted){
 			webshims.defineNodeNameProperties(nodeName, {
 				defaultMuted: {
 					get: function(){
@@ -1426,10 +1448,10 @@
 			if(elems && (len = elems.length) && loadedSwf){
 				
 				for(i = 0; i < len; i++){
-					if(flashNames[elems[i].nodeName] && 'api_pause' in elems[i]){
+					if(flashNames[elems[i].nodeName] && 'api_destroy' in elems[i]){
 						loadedSwf--;
 						try {
-							elems[i].api_pause();
+							elems[i].api_destroy();
 							if(elems[i].readyState == 4){
 								for (prop in elems[i]) {
 									if (!noRemove[prop] && !objElem[prop] && typeof elems[i][prop] == "function") {
@@ -1437,7 +1459,7 @@
 									}
 								}
 							}
-						} catch(er){}
+						} catch(er){console.log(er);}
 					}
 				}
 				
@@ -1564,7 +1586,8 @@
 	//descriptions are not really shown, but they are inserted into the dom
 	var showTracks = {subtitles: 1, captions: 1, descriptions: 1};
 	var dummyTrack = $('<track />');
-	var supportTrackMod = Modernizr.ES5 && Modernizr.objectAccessor;
+	var support = webshims.support;
+	var supportTrackMod = support.ES5 && support.objectAccessor;
 	var createEventTarget = function(obj){
 		var eventList = {};
 		obj.addEventListener = function(name, fn){
@@ -1873,19 +1896,23 @@
 		ttml = $.parseXML(ttml) || [];
 		return $(ttml).find('[begin][end]').map(mapTtmlToVtt).get().join('\n\n') || '';
 	};
-	
+	var loadingTracks = 0;
+
 	mediaelement.loadTextTrack = function(mediaelem, track, trackData, _default){
-		var loadEvents = 'play playing';
+		var loadEvents = 'play playing loadedmetadata loadstart';
 		var obj = trackData.track;
 		var load = function(){
 			var error, ajax, createAjax;
-			var src = obj.mode != 'disabled' && ($.attr(track, 'src') && $.prop(track, 'src'));
+			var isDisabled = obj.mode == 'disabled';
+			var videoState = !!($.prop(mediaelem, 'readyState') > 0 || $.prop(mediaelem, 'networkState') == 2 || !$.prop(mediaelem, 'paused'));
+			var src = (!isDisabled || videoState) && ($.attr(track, 'src') && $.prop(track, 'src'));
 
 			if(src){
 				$(mediaelem).off(loadEvents, load).off('updatetrackdisplay', load);
 
 				if(!trackData.readyState){
 					error = function(){
+						loadingTracks--;
 						trackData.readyState = 3;
 						obj.cues = null;
 						obj.activeCues = obj.shimActiveCues = obj._shimActiveCues = null;
@@ -1895,12 +1922,14 @@
 					try {
 						obj.cues = mediaelement.createCueList();
 						obj.activeCues = obj.shimActiveCues = obj._shimActiveCues = mediaelement.createCueList();
+						loadingTracks++;
 						createAjax = function(){
 							ajax = $.ajax({
 								dataType: 'text',
 								url: src,
 								success: function(text){
-									var contentType = ajax.getResponseHeader('content-type');
+									loadingTracks--;
+									var contentType = ajax.getResponseHeader('content-type') || '';
 
 									if(!contentType.indexOf('application/xml')){
 										text = ttmlTextToVTT(text);
@@ -1916,13 +1945,16 @@
 											error();
 										}
 									});
-									
 								},
 								error: error
 							});
 						};
 						if($.ajax && $.ajaxSettings.xhr){
-							createAjax();
+							if(isDisabled){
+								setTimeout(createAjax, loadingTracks * 2);
+							} else {
+								createAjax();
+							}
 						} else {
 							webshims.ready('jajax', createAjax);
 							webshims.loader.loadList(['jajax']);
@@ -1941,13 +1973,12 @@
 		obj.cues = null;
 
 		$(mediaelem).on(loadEvents, load);
+
 		if(_default){
 			obj.mode = showTracks[obj.kind] ? 'showing' : 'hidden';
-			webshims.ready('WINDOWLOAD', load);
+			load();
 		} else {
-			webshims.ready('WINDOWLOAD', function(){
-				$(mediaelem).on('updatetrackdisplay', load);
-			});
+			$(mediaelem).on('updatetrackdisplay', load);
 		}
 	};
 	
@@ -2219,7 +2250,7 @@ modified for webshims
 		return baseData.textTracks;
 	};
 	
-	if(!Modernizr.track){
+	if(!support.track){
 		webshims.defineNodeNamesBooleanProperty(['track'], 'default');
 		webshims.reflectProperties(['track'], ['srclang', 'label']);
 		
@@ -2234,7 +2265,7 @@ modified for webshims
 	
 	webshims.defineNodeNameProperties('track', {
 		kind: {
-			attr: Modernizr.track ? {
+			attr: support.track ? {
 				set: function(value){
 					var trackData = webshims.data(this, 'trackData');
 					this.setAttribute('data-kind', value);
@@ -2289,7 +2320,6 @@ modified for webshims
 	});
 	
 	//
-	
 	webshims.defineNodeNamesProperties(['track'], {
 		ERROR: {
 			value: 3
@@ -2399,7 +2429,7 @@ modified for webshims
 			})
 			.on('emptied updatetracklist wsmediareload', thUpdateList)
 			.each(function(){
-				if(Modernizr.track){
+				if(support.track){
 					var shimedTextTracks = $.prop(this, 'textTracks');
 					var origTextTracks = this.textTracks;
 
@@ -2424,7 +2454,7 @@ modified for webshims
 		});
 	});
 	
-	if(Modernizr.texttrackapi){
+	if(support.texttrackapi){
 		$('video, audio').trigger('trackapichange');
 	}
 });

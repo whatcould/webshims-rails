@@ -62,7 +62,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
 	var supportGetSetAttribute = !('getSetAttribute' in $.support) || $.support.getSetAttribute;
 	var has = Object.prototype.hasOwnProperty;
-	webshims.assumeARIA = supportGetSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
+	webshims.assumeARIA = true;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
 		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
@@ -80,15 +80,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					window.$ = webshims.$;
 				}
 				window.jQuery = webshims.$;
-			}
-			if(webshims.M != Modernizr){
-				webshims.error("Modernizr was included more than once. Make sure to include it only once! Webshims and other scripts might not work properly.");
-				for(var i in Modernizr){
-					if(!(i in webshims.M)){
-						webshims.M[i] = Modernizr[i];
-					}
-				}
-				Modernizr = webshims.M;
 			}
 		};
 		switch$();
@@ -418,7 +409,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		var UNKNOWN = webshims.getPrototypeOf(document.createElement('foobar'));
 		
 		//see also: https://github.com/lojjic/PIE/issues/40 | https://prototype.lighthouseapp.com/projects/8886/tickets/1107-ie8-fatal-crash-when-prototypejs-is-loaded-with-rounded-cornershtc
-		var isExtendNativeSave = Modernizr.advancedObjectProperties && Modernizr.objectAccessor;
+		var isExtendNativeSave = webshims.support.advancedObjectProperties && webshims.support.objectAccessor;
 		return function(nodeName, prop, desc){
 			var elem , elemProto;
 			 if( isExtendNativeSave && (elem = document.createElement(nodeName)) && (elemProto = webshims.getPrototypeOf(elem)) && UNKNOWN !== elemProto && ( !elem[prop] || !has.call(elem, prop) ) ){
@@ -729,7 +720,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 							});
 						}
 						webshims.ready('WINDOWLOAD', this.test);
-						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
+						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel playerdimensionchange', this.handler);
 						$(window).on('resize', this.handler);
 					}
 				}
@@ -1693,7 +1684,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	
 	var mediaelement = webshims.mediaelement;
 	var swfmini = window.swfmini;
-	var hasNative = Modernizr.audio && Modernizr.video;
+	var support = webshims.support;
+	var hasNative = support.mediaelement;
 	var hasFlash = swfmini.hasFlashPlayerVersion('9.0.115');
 	var loadedSwf = 0;
 	var needsLoadPreload = 'ActiveXObject' in window && hasNative;
@@ -1742,9 +1734,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		_bufferedEnd: 0,
 		_bufferedStart: 0,
 		currentTime: 0,
+		lastCalledTime: -500,
 		_ppFlag: undefined,
 		_calledMeta: false,
-		lastDuration: 0
+		lastDuration: 0,
+		_timeDif: 0.3
 	}, getProps, getSetProps);
 	
 	
@@ -1755,7 +1749,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			return null;
 		}
 		var data = webshims.data(elem, 'mediaelement');
-		return (data && data.isActive== 'third') ? data : null;
+		return (data && data.isActive == 'third') ? data : null;
 	};
 	
 	var trigger = function(elem, evt){
@@ -1886,6 +1880,14 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				if(!data._calledMeta){
 					trigger(data._elem, 'loadedmetadata');
 				}
+
+				if(data.duration > 1 && data.duration < 140){
+					data._timeDif = 0.2;
+				} else if(data.duration < 600) {
+					data._timeDif = 0.25;
+				} else {
+					data._timeDif = 0.30;
+				}
 			}
 			data._calledMeta = true;
 		},
@@ -1897,6 +1899,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			trigger(data._elem, 'waiting');
 		},
 		onTimeUpdate: function(jaris, data){
+			var timeDif = data.currentTime - data.lastCalledTime;
 			if(data.ended){
 				data.ended = false;
 			}
@@ -1907,7 +1910,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			if(data.seeking){
 				callSeeked(data);
 			}
-			trigger(data._elem, 'timeupdate');
+
+			if(timeDif > data._timeDif || timeDif < -0.3){
+				data.lastCalledTime = data.currentTime;
+				$.event.trigger('timeupdate', undefined, data._elem, true);
+			}
+			
 		},
 		onProgress: function(jaris, data){
 			if(data.ended){
@@ -1917,10 +1925,12 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return;
 			}
 			var percentage = jaris.loaded / jaris.total;
+			
 			if(percentage > 0.02 && percentage < 0.2){
 				setReadyState(3, data);
 			} else if(percentage > 0.2){
-				if(percentage > 0.99){
+				if(percentage > 0.95){
+					percentage = 1;
 					data.networkState = 1;
 				}
 				setReadyState(4, data);
@@ -2062,7 +2072,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			play: 1,
 			playing: 1
 		};
-		var hideEvtArray = ['play', 'pause', 'playing', 'canplay', 'progress', 'waiting', 'ended', 'loadedmetadata', 'durationchange', 'emptied'];
+		var hideEvtArray = ['play', 'pause', 'playing', 'loadstart', 'canplay', 'progress', 'waiting', 'ended', 'loadedmetadata', 'durationchange', 'emptied'];
 		var hidevents = hideEvtArray.map(function(evt){
 			return evt +'.webshimspolyfill';
 		}).join(' ');
@@ -2122,7 +2132,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	
 	
 	var resetSwfProps = (function(){
-		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'seeking', 'videoHeight', 'videoWidth'];
+		var resetProtoProps = ['_calledMeta', 'lastDuration', '_bufferedEnd', 'lastCalledTime', '_bufferedStart', '_ppFlag', 'currentSrc', 'currentTime', 'duration', 'ended', 'networkState', 'paused', 'seeking', 'videoHeight', 'videoWidth'];
 		var len = resetProtoProps.length;
 		return function(data){
 			
@@ -2242,7 +2252,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						ret.height = ret.width / ratio;
 						
 					}
-					if(!Modernizr.video){
+					if(!webshims.support.mediaelement){
 						ret.width = data.shadowElem.width();
 						ret.height = data.shadowElem.height();
 					}
@@ -2381,7 +2391,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		if(data && data.swfCreated){
 			mediaelement.setActive(elem, 'third', data);
 			
-			data.currentSrc = canPlaySrc.srcProp;
+			data.currentSrc = '';
 			
 			data.shadowElem.html('<div id="'+ elemId +'">');
 			
@@ -2389,6 +2399,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			data.actionQueue = [];
 			box = data.shadowElem;
 			resetSwfProps(data);
+			data.currentSrc = canPlaySrc.srcProp;
+
 		} else {
 			$(document.getElementById('wrapper-'+ elemId )).remove();
 			box = $('<div class="polyfill-'+ (elemNodeName) +' polyfill-mediaelement '+ webshims.shadowClass +'" id="wrapper-'+ elemId +'"><div id="'+ elemId +'"></div>')
@@ -2499,7 +2511,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				} else {
 					data.currentTime = jaris.position;
-					
+
 					if(data.api){
 						if(!data._calledMeta && isNaN(jaris.duration) && data.duration != jaris.duration && isNaN(data.duration)){
 							onEvent.onDataInitialized(jaris, data);
@@ -2574,7 +2586,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				}
 			}
 		});
-		
+
+		trigger(data._elem, 'loadstart');
 	};
 	
 	
@@ -2742,7 +2755,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		
 		mediaSup = webshims.defineNodeNameProperties(nodeName, descs, 'prop');
 		
-		if(!Modernizr.mediaDefaultMuted){
+		if(!support.mediaDefaultMuted){
 			webshims.defineNodeNameProperties(nodeName, {
 				defaultMuted: {
 					get: function(){
@@ -2781,10 +2794,10 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			if(elems && (len = elems.length) && loadedSwf){
 				
 				for(i = 0; i < len; i++){
-					if(flashNames[elems[i].nodeName] && 'api_pause' in elems[i]){
+					if(flashNames[elems[i].nodeName] && 'api_destroy' in elems[i]){
 						loadedSwf--;
 						try {
-							elems[i].api_pause();
+							elems[i].api_destroy();
 							if(elems[i].readyState == 4){
 								for (prop in elems[i]) {
 									if (!noRemove[prop] && !objElem[prop] && typeof elems[i][prop] == "function") {
@@ -2792,7 +2805,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 									}
 								}
 							}
-						} catch(er){}
+						} catch(er){console.log(er);}
 					}
 				}
 				

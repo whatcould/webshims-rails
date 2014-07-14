@@ -62,7 +62,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
 	var supportGetSetAttribute = !('getSetAttribute' in $.support) || $.support.getSetAttribute;
 	var has = Object.prototype.hasOwnProperty;
-	webshims.assumeARIA = supportGetSetAttribute || Modernizr.canvas || Modernizr.video || Modernizr.boxsizing;
+	webshims.assumeARIA = true;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
 		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
@@ -80,15 +80,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					window.$ = webshims.$;
 				}
 				window.jQuery = webshims.$;
-			}
-			if(webshims.M != Modernizr){
-				webshims.error("Modernizr was included more than once. Make sure to include it only once! Webshims and other scripts might not work properly.");
-				for(var i in Modernizr){
-					if(!(i in webshims.M)){
-						webshims.M[i] = Modernizr[i];
-					}
-				}
-				Modernizr = webshims.M;
 			}
 		};
 		switch$();
@@ -418,7 +409,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		var UNKNOWN = webshims.getPrototypeOf(document.createElement('foobar'));
 		
 		//see also: https://github.com/lojjic/PIE/issues/40 | https://prototype.lighthouseapp.com/projects/8886/tickets/1107-ie8-fatal-crash-when-prototypejs-is-loaded-with-rounded-cornershtc
-		var isExtendNativeSave = Modernizr.advancedObjectProperties && Modernizr.objectAccessor;
+		var isExtendNativeSave = webshims.support.advancedObjectProperties && webshims.support.objectAccessor;
 		return function(nodeName, prop, desc){
 			var elem , elemProto;
 			 if( isExtendNativeSave && (elem = document.createElement(nodeName)) && (elemProto = webshims.getPrototypeOf(elem)) && UNKNOWN !== elemProto && ( !elem[prop] || !has.call(elem, prop) ) ){
@@ -729,7 +720,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 							});
 						}
 						webshims.ready('WINDOWLOAD', this.test);
-						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel', this.handler);
+						$(document).on('updatelayout.webshim pageinit popupafteropen panelbeforeopen tabsactivate collapsibleexpand shown.bs.modal shown.bs.collapse slid.bs.carousel playerdimensionchange', this.handler);
 						$(window).on('resize', this.handler);
 					}
 				}
@@ -1843,7 +1834,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	"use strict";
 	var curCfg;
 	var formcfg = webshims.formcfg;
-	var hasFormValidation = Modernizr.formvalidation && !webshims.bugs.bustedValidity;
+	var hasFormValidation = webshims.support.formvalidation && !webshims.bugs.bustedValidity;
 	var monthDigits = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 	var stopPropagation = function(e){
 		e.stopImmediatePropagation();
@@ -1896,7 +1887,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			;
 		}
 	};
-	var numericType = Modernizr.inputtypes.tel && navigator.userAgent.indexOf('Mobile') != -1 && !('inputMode' in document.createElement('input') && !('inputmode' in document.createElement('input'))) ?
+	var numericType = webshims.support.inputtypes.tel && navigator.userAgent.indexOf('Mobile') != -1 && !('inputMode' in document.createElement('input') && !('inputmode' in document.createElement('input'))) ?
 		'tel' : 'text';
 	var splitInputs = {
 		date: {
@@ -2937,74 +2928,86 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	})();
 
 
-	$.fn.wsTouchClick = (function(){
-		var supportsTouchaction = ('touchAction' in document.documentElement.style);
-		var addTouch = !supportsTouchaction && ('ontouchstart' in window) && document.addEventListener;
-		return function(target, handler){
-			var touchData, touchEnd, touchStart;
 
-			if(addTouch){
+	if(!$.fn.wsTouchClick){
 
-				touchEnd = function(e){
-					var ret, touch;
-					e = e.originalEvent || {};
-					$(this).off('touchend touchcancel', touchEnd);
-					var changedTouches = e.changedTouches || e.touches;
-					if(e.type == 'touchcancel' || !touchData || !changedTouches || changedTouches.length != 1){
-						return;
+		$.fn.wsTouchClick = (function(){
+			var supportsTouchaction = ('touchAction' in document.documentElement.style);
+			var addTouch = !supportsTouchaction && ('ontouchstart' in window) && document.addEventListener;
+			return function(target, handler){
+				var touchData, touchEnd, touchStart, stopClick, allowClick;
+				var runHandler = function(){
+					if(!stopClick){
+						return handler.apply(this, arguments);
 					}
-
-					touch = changedTouches[0];
-					if(Math.abs(touchData.x - touch.pageX) > 40 || Math.abs(touchData.y - touch.pageY) > 40 || Date.now() - touchData.now > 300){
-						return;
-					}
-					e.preventDefault();
-					ret = handler.apply(this, arguments);
-
-					return ret;
 				};
-
-				touchStart = function(e){
-					var touch, elemTarget;
-
-
-					if((!e || e.touches.length != 1)){
-						return;
-					}
-					touch = e.touches[0];
-					elemTarget = target ? $(touch.target).closest(target) : $(this);
-					if(!elemTarget.length){
-						return;
-					}
-					touchData = {
-						x: touch.pageX,
-						y: touch.pageY,
-						now: Date.now()
+				if(addTouch){
+					allowClick = function(){
+						stopClick = false;
 					};
-					elemTarget.on('touchend touchcancel', touchEnd);
-				};
+					touchEnd = function(e){
+						var ret, touch;
+						e = e.originalEvent || {};
+						$(this).off('touchend touchcancel', touchEnd);
+						var changedTouches = e.changedTouches || e.touches;
+						if(e.type == 'touchcancel' || !touchData || !changedTouches || changedTouches.length != 1){
+							return;
+						}
 
-				this.each(function(){
-					this.addEventListener('touchstart', touchStart, true);
-				});
-			} else if(supportsTouchaction){
-				this.css('touch-action', 'manipulation');
-			}
+						touch = changedTouches[0];
+						if(Math.abs(touchData.x - touch.pageX) > 40 || Math.abs(touchData.y - touch.pageY) > 40 || Date.now() - touchData.now > 300){
+							return;
+						}
 
-			if($.isFunction(target)){
-				handler = target;
-				target = false;
-				this.on('click', handler);
-			} else {
-				this.on('click', target, handler);
-			}
-			return this;
-		};
-	})();
+						e.preventDefault();
+						stopClick = true;
+						setTimeout(allowClick, 400);
+
+						ret = handler.apply(this, arguments);
+
+						return ret;
+					};
+
+					touchStart = function(e){
+						var touch, elemTarget;
+						if((!e || e.touches.length != 1)){
+							return;
+						}
+						touch = e.touches[0];
+						elemTarget = target ? $(touch.target).closest(target) : $(this);
+						if(!elemTarget.length){
+							return;
+						}
+						touchData = {
+							x: touch.pageX,
+							y: touch.pageY,
+							now: Date.now()
+						};
+						elemTarget.on('touchend touchcancel', touchEnd);
+					};
+
+					this.each(function(){
+						this.addEventListener('touchstart', touchStart, true);
+					});
+				} else if(supportsTouchaction){
+					this.css('touch-action', 'manipulation');
+				}
+
+				if($.isFunction(target)){
+					handler = target;
+					target = false;
+					this.on('click', runHandler);
+				} else {
+					this.on('click', target, runHandler);
+				}
+				return this;
+			};
+		})();
+	}
 
 	(function(){
 		var picker = {};
-		var assumeVirtualKeyBoard = Modernizr.touchevents || Modernizr.touch || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
+		var assumeVirtualKeyBoard = (window.Modernizr && (Modernizr.touchevents || Modernizr.touch)) || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
 		webshims.inlinePopover = {
 			_create: function(){
 				this.element = $('<div class="ws-inline-picker"><div class="ws-po-box" /></div>').data('wspopover', this);
@@ -3394,7 +3397,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		
 		var stopCircular, isCheckValidity;
 		
-		var modernizrInputTypes = Modernizr.inputtypes;
+		var supportInputTypes = webshims.support.inputtypes;
 		var inputTypes = {
 			
 		};
@@ -3548,7 +3551,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			var type = $.prop(this, 'type');
 			var i, opts, data, optsName, labels, cNames, hasInitialFocus;
 
-			if(inputTypes[type] && webshims.implement(this, 'inputwidgets') && (!modernizrInputTypes[type] || !$(this).hasClass('ws-noreplace'))){
+			if(inputTypes[type] && webshims.implement(this, 'inputwidgets') && (!supportInputTypes[type] || !$(this).hasClass('ws-noreplace'))){
 				data = {};
 				optsName = type;
 				hasInitialFocus = $(this).is(':focus');
@@ -3719,11 +3722,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				});
 			}
 		}
-		if(modernizrInputTypes.number && navigator.userAgent.indexOf('Touch') == -1 && ((/MSIE 1[0|1]\.\d/.test(navigator.userAgent)) || (/Trident\/7\.0/.test(navigator.userAgent)))){
+		if(supportInputTypes.number && navigator.userAgent.indexOf('Touch') == -1 && ((/MSIE 1[0|1]\.\d/.test(navigator.userAgent)) || (/Trident\/7\.0/.test(navigator.userAgent)))){
 			replace.number = 1;
 		}
 		
-		if(!modernizrInputTypes.range || replace.range){
+		if(!supportInputTypes.range || replace.range){
 			extendType('range', {
 				_create: function(opts, set){
 					var data = $('<span />').insertAfter(opts.orig).rangeUI(opts).data('rangeUi');
@@ -3734,7 +3737,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		
 		
 		['number', 'time', 'month', 'date', 'color', 'datetime-local'].forEach(function(name){
-			if(!modernizrInputTypes[name] || replace[name]){
+			if(!supportInputTypes[name] || replace[name]){
 				extendType(name, {
 					_create: function(opts, set){
 						if(opts.monthSelect || opts.daySelect || opts.yearSelect){
@@ -3863,8 +3866,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	 */
 	
 	(function(){
-		var formsCFG = $.webshims.cfg.forms;
-		var listSupport = Modernizr.input.list;
+		var formsCFG = webshims.cfg.forms;
+		var listSupport = webshims.support.datalist;
 		if(listSupport && !formsCFG.customDatalist){return;}
 		
 			var initializeDatalist =  function(){
