@@ -250,6 +250,9 @@ webshims.isReady('swfmini', true);
 	};
 	var lazyLoad = function(){
 		var toLoad = ['form-validation'];
+
+		$(document).off('.lazyloadvalidation');
+
 		if(options.lazyCustomMessages){
 			options.customMessages = true;
 			toLoad.push('form-message');
@@ -264,7 +267,6 @@ webshims.isReady('swfmini', true);
 			toLoad.push('form-validators');
 		}
 		webshims.reTest(toLoad);
-		$(document).off('.lazyloadvalidation');
 	};
 	/*
 	 * Selectors for all browsers
@@ -321,11 +323,11 @@ webshims.isReady('swfmini', true);
 			};
 			$.extend(exp, {
 				"enabled": function( elem ) {
-					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
+					return 'disabled' in elem && elem.disabled === false && !$.find.matchesSelector(elem, 'fieldset[disabled] *');
 				},
 		
 				"disabled": function( elem ) {
-					return elem.disabled === true || ('disabled' in elem && $(elem).is('fieldset[disabled] *'));
+					return elem.disabled === true || ('disabled' in elem && $.find.matchesSelector(elem, 'fieldset[disabled] *'));
 				}
 			});
 		}
@@ -504,8 +506,7 @@ webshims.isReady('swfmini', true);
 	};
 
 
-	
-	$(document).on('focusin.lazyloadvalidation', function(e){
+	$(document).on('focusin.lazyloadvalidation mousedown.lazyloadvalidation touchstart.lazyloadvalidation', function(e){
 		if('form' in e.target){
 			lazyLoad();
 		}
@@ -536,6 +537,14 @@ webshims.isReady('swfmini', true);
 			});
 		}
 	});
+
+	if(options.addValidators && options.fastValidators){
+		webshims.reTest(['form-validators', 'form-validation']);
+	}
+
+	if(document.readyState == 'complete'){
+		webshims.isReady('WINDOWLOAD', true);
+	}
 });
 ;(function(webshims){
 	"use strict";
@@ -1070,6 +1079,10 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		webshims.ready(swfType, initMediaElements);
 	}
 	webshims.ready('track', loadTrackUi);
+
+	if(document.readyState == 'complete'){
+		webshims.isReady('WINDOWLOAD', true);
+	}
 });
 
 })(webshims);

@@ -549,8 +549,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				webshims.warn(type +' already implemented for element #'+elem.id);
 				return false;
 			}
+
 			data[type] = true;
-			return true;
+			return !$(elem).hasClass('ws-nopolyfill');
 		},
 		extendUNDEFProp: function(obj, props){
 			$.each(props, function(name, prop){
@@ -1239,6 +1240,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	var lazyLoad = function(){
 		var toLoad = ['form-validation'];
+
+		$(document).off('.lazyloadvalidation');
+
 		if(options.lazyCustomMessages){
 			options.customMessages = true;
 			toLoad.push('form-message');
@@ -1253,7 +1257,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			toLoad.push('form-validators');
 		}
 		webshims.reTest(toLoad);
-		$(document).off('.lazyloadvalidation');
 	};
 	/*
 	 * Selectors for all browsers
@@ -1310,11 +1313,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			};
 			$.extend(exp, {
 				"enabled": function( elem ) {
-					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
+					return 'disabled' in elem && elem.disabled === false && !$.find.matchesSelector(elem, 'fieldset[disabled] *');
 				},
 		
 				"disabled": function( elem ) {
-					return elem.disabled === true || ('disabled' in elem && $(elem).is('fieldset[disabled] *'));
+					return elem.disabled === true || ('disabled' in elem && $.find.matchesSelector(elem, 'fieldset[disabled] *'));
 				}
 			});
 		}
@@ -1493,8 +1496,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 
 
-	
-	$(document).on('focusin.lazyloadvalidation', function(e){
+	$(document).on('focusin.lazyloadvalidation mousedown.lazyloadvalidation touchstart.lazyloadvalidation', function(e){
 		if('form' in e.target){
 			lazyLoad();
 		}
@@ -1525,6 +1527,14 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			});
 		}
 	});
+
+	if(options.addValidators && options.fastValidators){
+		webshims.reTest(['form-validators', 'form-validation']);
+	}
+
+	if(document.readyState == 'complete'){
+		webshims.isReady('WINDOWLOAD', true);
+	}
 });
 ;webshims.register('form-shim-extend', function($, webshims, window, document, undefined, options){
 "use strict";
@@ -1920,7 +1930,7 @@ var rsubmittable = /^(?:select|textarea|input)/i;
 				;
 				return function(){
 					var elem = $(this).getNativeElement()[0];
-					return !!(!elem.readOnly && !types[elem.type] && !$(elem).is(':disabled') );
+					return !!(!elem.readOnly && !types[elem.type] && !$.find.matchesSelector(elem, ':disabled') );
 				};
 			})()
 		},

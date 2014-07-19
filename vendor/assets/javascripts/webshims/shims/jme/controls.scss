@@ -30,6 +30,15 @@ $browser-context: 16; // Default
 	@return #{$pixels/$context}em
 }
 
+@-webkit-keyframes jmespin {
+	0% {
+		-webkit-transform: rotate(0deg);
+	}
+
+	100% {
+		-webkit-transform: rotate(360deg);
+	}
+}
 
 @keyframes jmespin {
 	0% {
@@ -186,7 +195,9 @@ $browser-context: 16; // Default
 
 	&[data-state="idle"] {
 		cursor: pointer;
+	}
 
+	&.initial-state {
 		> .jme-media-overlay {
 			@extend %icon-play-circle;
 			background-position: 1px 1px;
@@ -198,7 +209,7 @@ $browser-context: 16; // Default
 		}
 	}
 
-	&[data-state="ended"] {
+	&.ended-state {
 		cursor: pointer;
 		> .jme-media-overlay {
 			@extend %icon-loop;
@@ -213,6 +224,11 @@ $browser-context: 16; // Default
 			background-position: 4px 4px;
 
 			&:before {
+				-webkit-animation-name: jmespin;
+				-webkit-animation-iteration-count: infinite;
+				-webkit-animation-duration: 1100ms;
+				-webkit-animation-timing-function: linear;
+
 				animation-name: jmespin;
 				animation-iteration-count: infinite;
 				animation-duration: 1100ms;
@@ -243,10 +259,12 @@ $browser-context: 16; // Default
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: #000 no-repeat center / contain;
+		background: #000 no-repeat center;
+		background-size: contain;
 	}
 
-	&.initial-state .ws-poster {
+	&.initial-state .ws-poster,
+	&.ended-state .ws-poster {
 		display: block;
 	}
 

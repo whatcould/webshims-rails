@@ -27,6 +27,9 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 	var lazyLoad = function(){
 		var toLoad = ['form-validation'];
+
+		$(document).off('.lazyloadvalidation');
+
 		if(options.lazyCustomMessages){
 			options.customMessages = true;
 			toLoad.push('form-message');
@@ -41,7 +44,6 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			toLoad.push('form-validators');
 		}
 		webshims.reTest(toLoad);
-		$(document).off('.lazyloadvalidation');
 	};
 	/*
 	 * Selectors for all browsers
@@ -98,11 +100,11 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			};
 			$.extend(exp, {
 				"enabled": function( elem ) {
-					return elem.disabled === false && !$(elem).is('fieldset[disabled] *');
+					return 'disabled' in elem && elem.disabled === false && !$.find.matchesSelector(elem, 'fieldset[disabled] *');
 				},
 		
 				"disabled": function( elem ) {
-					return elem.disabled === true || ('disabled' in elem && $(elem).is('fieldset[disabled] *'));
+					return elem.disabled === true || ('disabled' in elem && $.find.matchesSelector(elem, 'fieldset[disabled] *'));
 				}
 			});
 		}
@@ -281,8 +283,7 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 	};
 
 
-	
-	$(document).on('focusin.lazyloadvalidation', function(e){
+	$(document).on('focusin.lazyloadvalidation mousedown.lazyloadvalidation touchstart.lazyloadvalidation', function(e){
 		if('form' in e.target){
 			lazyLoad();
 		}
@@ -313,4 +314,12 @@ webshims.register('form-core', function($, webshims, window, document, undefined
 			});
 		}
 	});
+
+	if(options.addValidators && options.fastValidators){
+		webshims.reTest(['form-validators', 'form-validation']);
+	}
+
+	if(document.readyState == 'complete'){
+		webshims.isReady('WINDOWLOAD', true);
+	}
 });

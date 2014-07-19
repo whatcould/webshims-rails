@@ -462,6 +462,7 @@
 	var onEvent = {
 		onPlayPause: function(jaris, data, override){
 			var playing, type;
+			var idled = data.paused || data.ended;
 			if(override == null){
 				try {
 					playing = data.api.api_get("isPlaying");
@@ -469,7 +470,7 @@
 			} else {
 				playing = override;
 			}
-			if(playing == data.paused){
+			if(playing == idled || playing == null){
 				
 				data.paused = !playing;
 				type = data.paused ? 'pause' : 'play';
@@ -1546,11 +1547,11 @@
 			var media, error, parent;
 			if(
 				($(e.target).is('audio, video') || ((parent = e.target.parentNode) && $('source', parent).last()[0] == e.target)) &&
-				(media = $(e.target).closest('audio, video')) && !media.is('.nonnative-api-active')
+				(media = $(e.target).closest('audio, video')) && !media.hasClass('nonnative-api-active')
 				){
 				error = media.prop('error');
 				setTimeout(function(){
-					if(!media.is('.nonnative-api-active')){
+					if(!media.hasClass('nonnative-api-active')){
 						if(error && switchErrors[error.code]){
 							options.preferFlash = true;
 							document.removeEventListener('error', switchOptions, true);

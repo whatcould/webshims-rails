@@ -549,8 +549,9 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				webshims.warn(type +' already implemented for element #'+elem.id);
 				return false;
 			}
+
 			data[type] = true;
-			return true;
+			return !$(elem).hasClass('ws-nopolyfill');
 		},
 		extendUNDEFProp: function(obj, props){
 			$.each(props, function(name, prop){
@@ -2015,9 +2016,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			$(element).attr({'aria-labelledby': labels.map(getId).get().join(' ')});
 			if(!noFocus){
 				labels.on('click', function(e){
-					element.getShadowFocusElement().focus();
-					e.preventDefault();
-					return false;
+					if(!e.isDefaultPrevented()){
+						element.getShadowFocusElement().focus();
+						e.preventDefault();
+						return false;
+					}
 				});
 			}
 		};
@@ -3675,7 +3678,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						});
 					});
 				}
-				
+
 				if(opts.calculateWidth){
 					sizeInput(data.shim);
 				} else {
@@ -3705,28 +3708,28 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 		
 		var replace = {};
-		
-		
+
 		if(options.replaceUI){
-			if( $.isPlainObject(options.replaceUI) ){
-				$.extend(replace, options.replaceUI);
-			} else {
-				$.extend(replace, {
-					'range': 1,
-					'number': 1,
-					'time': 1, 
-					'month': 1, 
-					'date': 1, 
-					'color': 1, 
-					'datetime-local': 1
-				});
-			}
+			$.each($.extend(replace, $.isPlainObject(options.replaceUI) ? options.replaceUI : {
+				'range': 1,
+				'number': 1,
+				'time': 1,
+				'month': 1,
+				'date': 1,
+				'color': 1,
+				'datetime-local': 1
+			}), function(name, val){
+				if(supportInputTypes[name] && val == 'auto'){
+					replace[name] = webshims._getAutoEnhance(val);
+				}
+			});
 		}
+
 		if(supportInputTypes.number && navigator.userAgent.indexOf('Touch') == -1 && ((/MSIE 1[0|1]\.\d/.test(navigator.userAgent)) || (/Trident\/7\.0/.test(navigator.userAgent)))){
 			replace.number = 1;
 		}
 		
-		if(!supportInputTypes.range || replace.range){
+		if(replace.range !== false && (!supportInputTypes.range || replace.range)){
 			extendType('range', {
 				_create: function(opts, set){
 					var data = $('<span />').insertAfter(opts.orig).rangeUI(opts).data('rangeUi');
@@ -3737,12 +3740,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		
 		
 		['number', 'time', 'month', 'date', 'color', 'datetime-local'].forEach(function(name){
-			if(!supportInputTypes[name] || replace[name]){
+			if(replace[name] !== false && (!supportInputTypes[name] || replace[name])){
 				extendType(name, {
 					_create: function(opts, set){
 						if(opts.monthSelect || opts.daySelect || opts.yearSelect){
 							opts.splitInput = true;
 						}
+
 						if(opts.splitInput && !splitInputs[name]){
 							webshims.warn('splitInput not supported for '+ name);
 							opts.splitInput = false;

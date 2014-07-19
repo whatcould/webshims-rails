@@ -73,6 +73,10 @@ span.has-input-buttons {
 	}
 }
 
+.ws-number[readonly][aria-readonly="false"] {
+	cursor: default;
+}
+
 .input-buttons,
 .step-controls,
 .ws-popover-opener {
@@ -209,7 +213,6 @@ input[type="color"] {
 	}
 
 	.step-controls {
-		visibility: hidden;
 		opacity: 0;
 	}
 
@@ -219,7 +222,6 @@ input[type="color"] {
 	&:hover {
 		.step-controls {
 			opacity: 1;
-			visibility: visible;
 		}
 
 	}
