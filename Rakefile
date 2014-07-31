@@ -1,5 +1,6 @@
 require "bundler/gem_tasks"
 
+desc "Update the source from the webshim github [Specify REF and VERSION]."
 task :update do
   if ! ENV['REF']
     raise "No REF value given. Set branch/tag/id, e.g., REF=1.2.2"
