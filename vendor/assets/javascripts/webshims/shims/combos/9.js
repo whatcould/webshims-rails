@@ -60,7 +60,6 @@
 webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
 	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
-	var supportGetSetAttribute = !('getSetAttribute' in $.support) || $.support.getSetAttribute;
 	var has = Object.prototype.hasOwnProperty;
 	webshims.assumeARIA = true;
 	
@@ -91,7 +90,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	}
 
 	//shortcus
-	var modules = webshims.modules;
 	var listReg = /\s*,\s*/;
 		
 	//proxying attribute
@@ -476,8 +474,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				(tempCache || $( document.getElementsByTagName(nodeName) )).each(fn);
 			}
 		};
-		
-		var elementExtends = {};
+
 		return {
 			createTmpCache: function(nodeName){
 				if($.isDOMReady){
@@ -529,6 +526,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	$.extend(webshims, {
+		xProps: havePolyfill,
 		getID: (function(){
 			var ID = new Date().getTime();
 			return function(elem){
@@ -542,6 +540,26 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
+		domPrefixes: ["ws", "webkit", "moz", "ms", "o"],
+
+		prefixed: function (prop, obj){
+			var i, testProp;
+			var ret = false;
+			if(obj[prop]){
+				ret = prop;
+			}
+			if(!ret){
+				prop = prop.charAt(0).toUpperCase() + prop.slice(1);
+				for(i = 0; i < webshims.domPrefixes.length; i++){
+					testProp = webshims.domPrefixes[i]+prop;
+					if(testProp in obj){
+						ret = testProp;
+						break;
+					}
+				}
+			}
+			return ret;
+		},
 		shadowClass: 'wsshadow-'+(Date.now()),
 		implement: function(elem, type){
 			var data = elementData(elem, 'implemented') || elementData(elem, 'implemented', {});
@@ -2255,22 +2273,36 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				}
 				return val;
 			},
-			time: function(val){
-				var fVal;
-				if(val && curCfg.meridian){
+			time: function(val, o, noCorrect){
+				var fVal, i;
+				if(val){
+
 					val = val.split(':');
-					fVal = (val[0] * 1);
-					if(fVal && fVal >= 12){
-						val[0] = addZero(fVal - 12+'');
-						fVal = 1;
-						
-					} else {
-						fVal = 0;
+					if(curCfg.meridian){
+						fVal = (val[0] * 1);
+						if(fVal && fVal >= 12){
+							val[0] = addZero(fVal - 12+'');
+							fVal = 1;
+						} else {
+							fVal = 0;
+						}
+						if(val[0] === '00'){
+							val[0] = '12';
+						}
 					}
-					if(val[0] === '00'){ 
-						val[0] = '12';
+					if(!noCorrect){
+						for(i = 0; i < val.length; i++){
+							val[i] = addZero(val[i]);
+						}
+
+						if(!val[1]){
+							val[1] = '00';
+						}
 					}
-					val = $.trim(val.join(':')) + ' '+ curCfg.meridian[fVal];
+					val = $.trim(val.join(':'));
+					if(fVal != null && curCfg.meridian){
+						val += ' '+curCfg.meridian[fVal];
+					}
 				}
 				return val;
 			},
@@ -2359,12 +2391,15 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				var fVal;
 				if(val && curCfg.meridian){
 					val = val.toUpperCase();
-					if(val.substr(0,2) === "12"){ 
+					if(val.substr(0,2) === "12"){
 						val = "00" + val.substr(2);
 					}
+
 					if(val.indexOf(curCfg.meridian[1]) != -1){
+
 						val = val.split(':');
-						fVal = (val[0] * 1);
+						fVal = (val[0].replace(curCfg.meridian[1], '') * 1);
+
 						if(!isNaN(fVal)){
 							val[0] = fVal + 12;
 						}

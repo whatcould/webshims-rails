@@ -60,7 +60,6 @@
 webshims.register('dom-extend', function($, webshims, window, document, undefined){
 	"use strict";
 	var supportHrefNormalized = !('hrefNormalized' in $.support) || $.support.hrefNormalized;
-	var supportGetSetAttribute = !('getSetAttribute' in $.support) || $.support.getSetAttribute;
 	var has = Object.prototype.hasOwnProperty;
 	webshims.assumeARIA = true;
 	
@@ -91,7 +90,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	}
 
 	//shortcus
-	var modules = webshims.modules;
 	var listReg = /\s*,\s*/;
 		
 	//proxying attribute
@@ -476,8 +474,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				(tempCache || $( document.getElementsByTagName(nodeName) )).each(fn);
 			}
 		};
-		
-		var elementExtends = {};
+
 		return {
 			createTmpCache: function(nodeName){
 				if($.isDOMReady){
@@ -529,6 +526,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	$.extend(webshims, {
+		xProps: havePolyfill,
 		getID: (function(){
 			var ID = new Date().getTime();
 			return function(elem){
@@ -542,6 +540,26 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
+		domPrefixes: ["ws", "webkit", "moz", "ms", "o"],
+
+		prefixed: function (prop, obj){
+			var i, testProp;
+			var ret = false;
+			if(obj[prop]){
+				ret = prop;
+			}
+			if(!ret){
+				prop = prop.charAt(0).toUpperCase() + prop.slice(1);
+				for(i = 0; i < webshims.domPrefixes.length; i++){
+					testProp = webshims.domPrefixes[i]+prop;
+					if(testProp in obj){
+						ret = testProp;
+						break;
+					}
+				}
+			}
+			return ret;
+		},
 		shadowClass: 'wsshadow-'+(Date.now()),
 		implement: function(elem, type){
 			var data = elementData(elem, 'implemented') || elementData(elem, 'implemented', {});

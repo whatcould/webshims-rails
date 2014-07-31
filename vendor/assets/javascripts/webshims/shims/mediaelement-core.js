@@ -59,7 +59,7 @@
 	}
 
 webshims.register('mediaelement-core', function($, webshims, window, document, undefined, options){
-	var hasSwf = swfmini.hasFlashPlayerVersion('10.0.3');
+	var hasSwf = swfmini.hasFlashPlayerVersion('11.3');
 	var mediaelement = webshims.mediaelement;
 	
 	mediaelement.parseRtmp = function(data){
@@ -169,6 +169,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			loadYt();
 		}
 	};
+
 	
 	webshims.addPolyfill('mediaelement-yt', {
 		test: !hasYt,
@@ -213,7 +214,16 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		if(src.indexOf('youtube.com/watch?') != -1 || src.indexOf('youtube.com/v/') != -1){
 			return 'video/youtube';
 		}
-		if(src.indexOf('rtmp') === 0){
+
+		if(!src.indexOf('mediastream:') || !src.indexOf('blob:http')){
+			return 'usermedia';
+		}
+
+		if(!src.indexOf('webshimstream')){
+			return 'jarisplayer/stream';
+		}
+
+		if(!src.indexOf('rtmp')){
 			return nodeName+'/rtmp';
 		}
 		src = src.split('?')[0].split('#')[0].split('.');
@@ -230,28 +240,24 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	};
 	
 	
-	mediaelement.srces = function(mediaElem, srces){
+	mediaelement.srces = function(mediaElem){
+		var srces = [];
 		mediaElem = $(mediaElem);
-		if(!srces){
-			srces = [];
-			var nodeName = mediaElem[0].nodeName.toLowerCase();
-			var src = getSrcObj(mediaElem, nodeName);
-			
-			if(!src.src){
-				$('source', mediaElem).each(function(){
-					src = getSrcObj(this, nodeName);
-					if(src.src){srces.push(src);}
-				});
-			} else {
-				srces.push(src);
-			}
-			return srces;
+		var nodeName = mediaElem[0].nodeName.toLowerCase();
+		var src = getSrcObj(mediaElem, nodeName);
+
+		if(!src.src){
+			$('source', mediaElem).each(function(){
+				src = getSrcObj(this, nodeName);
+				if(src.src){srces.push(src);}
+			});
 		} else {
-			webshims.error('setting sources was removed.');
+			srces.push(src);
 		}
+		return srces;
 	};
 	
-	mediaelement.swfMimeTypes = ['video/3gpp', 'video/x-msvideo', 'video/quicktime', 'video/x-m4v', 'video/mp4', 'video/m4p', 'video/x-flv', 'video/flv', 'audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/mp3', 'audio/x-fla', 'audio/fla', 'youtube/flv', 'video/jarisplayer', 'jarisplayer/jarisplayer', 'video/youtube', 'video/rtmp', 'audio/rtmp'];
+	mediaelement.swfMimeTypes = ['video/3gpp', 'video/x-msvideo', 'video/quicktime', 'video/x-m4v', 'video/mp4', 'video/m4p', 'video/x-flv', 'video/flv', 'audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/mp3', 'audio/x-fla', 'audio/fla', 'youtube/flv', 'video/jarisplayer', 'jarisplayer/jarisplayer', 'jarisplayer/stream', 'video/youtube', 'video/rtmp', 'audio/rtmp'];
 	
 	mediaelement.canThirdPlaySrces = function(mediaElem, srces){
 		var ret = '';
@@ -281,7 +287,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			srces = srces || mediaelement.srces(mediaElem);
 			
 			$.each(srces, function(i, src){
-				if(src.type && nativeCanPlay.call(mediaElem[0], src.type) ){
+				if(src.type == 'usermedia' || (src.type && nativeCanPlay.call(mediaElem[0], src.type)) ){
 					ret = src;
 					return false;
 				}

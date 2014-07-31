@@ -107,7 +107,8 @@
 	var featureAlias = {
 		matchmedia: 'matchMedia',
 		xhr2: 'filereader',
-		promise: 'es6'
+		promise: 'es6',
+		URL: 'url'
 	};
 
 	clearInterval(webshims.timer);
@@ -126,7 +127,7 @@
 	}
 
 	$.extend(webshims, {
-		version: '1.14.5',
+		version: '1.14.6',
 
 		cfg: {
 			enhanceAuto: window.Audio && (!window.matchMedia || matchMedia('(min-device-width: 721px)').matches),
@@ -623,6 +624,7 @@
 		error: 1
 	};
 	var $fn = $.fn;
+	var video = create('video');
 	
 	webshims.addMethodName = function(name){
 		name = name.split(':');
@@ -968,6 +970,22 @@
 		c: [21]
 	});
 	//>
+
+	//<usermedia
+	var userMediaTest =  ('getUserMedia' in navigator);
+
+	addPolyfill('usermedia-core', {
+		f: 'usermedia',
+		test: userMediaTest,
+		d: [DOMSUPPORT]
+	});
+
+	addPolyfill('usermedia-shim', {
+		f: 'usermedia',
+		test: !!(userMediaTest || navigator.webkitGetUserMedia || navigator.mozGetUserMedia),
+		d: ['url', 'mediaelement', DOMSUPPORT]
+	});
+	//>
 	
 	//<canvas
 	(function(){
@@ -1007,6 +1025,7 @@
 
 		var initialFormTest = function(){
 			var tmp, fieldset;
+			var testValue = '1(';
 			var input = create('input');
 			fieldset = $('<fieldset><textarea required="" /></fieldset>')[0];
 
@@ -1014,7 +1033,7 @@
 
 			$.each(['range', 'date', 'datetime-local', 'month', 'color', 'number'], function(i, type){
 				input.setAttribute('type', type);
-				inputtypes[type] = (input.type == type && (input.value = '(') && input.value != '(');
+				inputtypes[type] = (input.type == type && (input.value = testValue) && input.value != testValue);
 			});
 
 			support.datalist = !!(('options' in create('datalist')) && window.HTMLDataListElement);
@@ -1240,10 +1259,23 @@
 	});
 	//>
 
+	//<url
+	addPolyfill('url', {
+		test: function(){
+			var support = false;
+			try {
+				support = new URL('b', 'http://a');
+				support = !!(support.searchParams && support.href == 'http://a/b');
+			} catch(e){}
+			return support;
+		},
+		d: ['es5']
+	});
+	//>
+
 	//<mediaelement
 	(function(){
 		webshims.mediaelement = {};
-		var video = create('video');
 		var track = create('track');
 		support.mediaelement = ('canPlayType' in video);
 		support.texttrackapi = ('addTextTrack' in video);
@@ -1273,7 +1305,7 @@
 			d: ['swfmini'],
 			c: [16, 7, 2, 8, 1, 12, 13, 23]
 		});
-		
+
 		
 		addPolyfill('mediaelement-jaris', {
 			f: 'mediaelement',
@@ -1288,7 +1320,7 @@
 				if(options.preferFlash && !modules.swfmini.test()){
 					options.preferFlash = false;
 				}
-				return !( options.preferFlash && swfmini.hasFlashPlayerVersion('10.0.3') );
+				return !( options.preferFlash && swfmini.hasFlashPlayerVersion('11.3') );
 			},
 			c: [21, 25]
 		});

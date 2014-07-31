@@ -1,5 +1,4 @@
-(function(){
-	"use strict";
+webshim.ready('matchMedia', function($, webshim, w, doc, undefined){
 	try {
 		new Image();
 	} catch(e){
@@ -7,75 +6,8 @@
 			return document.createElement('img');
 		};
 	}
-
 	webshim.isReady('picture', true);
-	setTimeout(function(){
-		if(window.picturefill){
-			var sel = 'picture, img[srcset]';
-			webshim.addReady(function(context){
-				if(context.querySelector(sel)){
-					window.picturefill();
-				}
-			});
-		}
-	});
-})();
-/*! Picturefill - v2.1.0-beta - 2014-07-15
- * http://scottjehl.github.io/picturefill
- * Copyright (c) 2014 https://github.com/scottjehl/picturefill/blob/master/Authors.txt; Licensed MIT */
-/*! matchMedia() polyfill - Test a CSS media type/query in JS. Authors & copyright (c) 2012: Scott Jehl, Paul Irish, Nicholas Zakas, David Knight. Dual MIT/BSD license */
-
-window.matchMedia || (window.matchMedia = function() {
-	"use strict";
-
-	// For browsers that support matchMedium api such as IE 9 and webkit
-	var styleMedia = (window.styleMedia || window.media);
-
-	// For those that don't support matchMedium
-	if (!styleMedia) {
-		var style       = document.createElement('style'),
-			script      = document.getElementsByTagName('script')[0],
-			info        = null;
-
-		style.type  = 'text/css';
-		style.id    = 'matchmediajs-test';
-
-		script.parentNode.insertBefore(style, script);
-
-		// 'style.currentStyle' is used by IE <= 8 and 'window.getComputedStyle' for all other browsers
-		info = ('getComputedStyle' in window) && window.getComputedStyle(style, null) || style.currentStyle;
-
-		styleMedia = {
-			matchMedium: function(media) {
-				var text = '@media ' + media + '{ #matchmediajs-test { width: 1px; } }';
-
-				// 'style.styleSheet' is used by IE <= 8 and 'style.textContent' for all other browsers
-				if (style.styleSheet) {
-					style.styleSheet.cssText = text;
-				} else {
-					style.textContent = text;
-				}
-
-				// Test if media query is true or false
-				return info.width === '1px';
-			}
-		};
-	}
-
-	return function(media) {
-		return {
-			matches: styleMedia.matchMedium(media || 'all'),
-			media: media || 'all'
-		};
-	};
-}());
-/*! Picturefill - Responsive Images that work today.
- *  Author: Scott Jehl, Filament Group, 2012 ( new proposal implemented by Shawn Jansepar )
- *  License: MIT/GPLv2
- *  Spec: http://picture.responsiveimages.org/
- */
-(function( w, doc ) {
-	// Enable strict mode
+// Enable strict mode
 	"use strict";
 
 	// If picture is supported, well, that's awesome. Let's get outta here...
@@ -490,6 +422,10 @@ window.matchMedia || (window.matchMedia = function() {
 			if ( source.nodeName.toUpperCase() !== "SOURCE" ) {
 				continue;
 			}
+			// if it's a source element that has the `src` property set, throw a warning in the console
+			if ( source.getAttribute( "src" ) !== null && typeof console !== undefined ){
+				console.warn("The `src` attribute is invalid on `picture` `source` element; instead, use `srcset`.");
+			}
 
 			var media = source.getAttribute( "media" );
 
@@ -626,17 +562,18 @@ window.matchMedia || (window.matchMedia = function() {
 	picturefill._ = pf;
 
 	/* expose picturefill */
-	if ( typeof module === "object" && typeof module.exports === "object" ) {
-		// CommonJS, just export
-		module.exports = picturefill;
-	} else if ( typeof define === "function" && define.amd ){
-		// AMD support
-		define( function() { return picturefill; } );
-	} else if ( typeof w === "object" ) {
-		// If no AMD and we are in the browser, attach to window
-		w.picturefill = picturefill;
-	}
+	w.picturefill = picturefill;
 
-} )( this, this.document );
+	(function(){
+
+		webshim.isReady('picture', true);
+		var sel = 'picture, img[srcset]';
+		webshim.addReady(function(context){
+			if(context.querySelector(sel)){
+				window.picturefill();
+			}
+		});
+	})();
+} );
 
 

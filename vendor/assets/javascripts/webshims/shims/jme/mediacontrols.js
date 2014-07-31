@@ -50,7 +50,9 @@ webshims.register('mediacontrols', function($, webshims, window){
 			return cache[template] || '';
 		};
 	})();
-	var ios6 = /iP(hone|od|ad)/i.test(navigator.platform) && parseInt(((navigator.appVersion).match(/OS (\d+)_\d+/) || ['','8'])[1], 10) < 7;
+	var ios = /iP(hone|od|ad)/i.test(navigator.platform);
+	var ios6 = ios && parseInt(((navigator.appVersion).match(/OS (\d+)_\d+/) || ['','8'])[1], 10) < 7;
+	var hasYtBug = (!window.Modernizr || !Modernizr.videoautoplay) && (ios || /android/i.test(navigator.userAgent));
 	var loadLazy = function(){
 		if(!loadLazy.loaded){
 			loadLazy.loaded = true;
@@ -77,7 +79,8 @@ webshims.register('mediacontrols', function($, webshims, window){
 	};
 
 	webshims.loader.addModule('mediacontrols-lazy', {
-		src: 'jme/mediacontrols-lazy'
+		src: 'jme/mediacontrols-lazy',
+		d: ['dom-support']
 	});
 
 	var userActivity = {
@@ -100,6 +103,11 @@ webshims.register('mediacontrols', function($, webshims, window){
 						data.media.removeAttr('controls');
 						data.media.mediaLoad();
 					}
+
+					if(hasYtBug){
+						data.player.addClass('has-yt-bug');
+					}
+
 					data.media.prop('controls', false);
 					structure = getBarHtml();
 					data._controlbar = $( options.barStructure );
@@ -146,7 +154,7 @@ webshims.register('mediacontrols', function($, webshims, window){
 					})();
 					var $poster = $('<div class="ws-poster" />').insertAfter(data.media);
 					var posterState = (function(){
-						var lastPosterState, lastYoutubeState, lastPoster;
+						var lastPosterState, lastYoutubeState, lastPoster, isYt;
 						var hasFlash = window.swfmini && swfmini.hasFlashPlayerVersion('10.0.3');
 						var regYt = /youtube\.com\/[watch\?|v\/]+/i;
 
@@ -162,8 +170,10 @@ webshims.register('mediacontrols', function($, webshims, window){
 							data.player.addClass('no-backgroundsize');
 						}
 						data.media.on('play playing waiting seeked seeking', function(e){
-
-							if(isInitial){
+							if(!e){
+								e.type = 'playing';
+							}
+							if(isInitial && (!isYt || !hasYtBug || e.type == 'playing' || data.media.prop('readyState') > 1)){
 								isInitial = false;
 								data.player.removeClass('initial-state');
 							}
@@ -179,12 +189,16 @@ webshims.register('mediacontrols', function($, webshims, window){
 								data.player.addClass('ended-state');
 							}
 						});
+
 						return function(){
+							var hasYt;
 							var poster = data.media.attr('poster');
 							var hasPoster = !!poster;
 							var currentSrc = data.media.prop('currentSrc') || '';
-							var isYt = regYt.test(currentSrc);
-							var hasYt = (hasFlash && hasPoster) ? false : isYt;
+
+							isYt = regYt.test(currentSrc);
+
+							hasYt = (hasFlash && hasPoster) ? false : isYt;
 
 							if(!hasPoster && isYt){
 								poster =  currentSrc.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i) || '';
@@ -213,6 +227,9 @@ webshims.register('mediacontrols', function($, webshims, window){
 								isEnded = false;
 								data.player.removeClass('ended-state');
 							}
+
+							//https://code.google.com/p/gdata-issues/issues/detail?id=5415
+							data.player[isYt ? 'addClass' : 'removeClass']('yt-video');
 
 							if(lastYoutubeState !== hasYt){
 								lastYoutubeState = hasYt;
