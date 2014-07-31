@@ -43,6 +43,7 @@ EOT
   input = STDIN.gets.strip
 end
 
+desc "Commit changes, build and push the gem."
 task :push do
     if ! ENV['VERSION']
       raise "No VERSION value given. Set version, e.g., VERSION=1.2.2"
