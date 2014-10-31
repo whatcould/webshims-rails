@@ -2,13 +2,21 @@ webshims.register('mediaelement-yt', function($, webshims, window, document, und
 "use strict";
 var mediaelement = webshims.mediaelement;
 var ytAPI = $.Deferred();
+var loadYTAPI = function(){
+	if(!window.YT){
+		webshims.loader.loadScript("https://www.youtube.com/player_api");
+	}
+	loadYTAPI = $.noop;
+};
+var modern = window.Modernizr;
+var assumeYTBug = (!modern || !modern.videoautoplay) && /iP(hone|od|ad)|android/i.test(navigator.userAgent);
 window.onYouTubePlayerAPIReady = function() {
 	ytAPI.resolve();
+	loadYTAPI = $.noop;
 };
 if(window.YT && YT.Player){
 	window.onYouTubePlayerAPIReady();
 }
-
 var getProps = {
 	paused: true,
 	ended: false,
@@ -45,7 +53,6 @@ var getSetProps = {
 	volume: 1,
 	muted: false
 };
-var getSetPropKeys = Object.keys(getSetProps);
 
 var playerStateObj = $.extend({
 	isActive: 'html5',
@@ -193,7 +200,6 @@ var getComputedDimension = (function(){
 
 var setElementDimension = function(data){
 	var dims;
-	var elem = data._elem;
 	var box = data.shadowElem;
 	if(data.isActive == 'third'){
 		if(data && data._ytAPI && data._ytAPI.getPlaybackQuality){
@@ -439,9 +445,9 @@ var addYtAPI = function(mediaElm, elemId, data, ytParams){
 				var currentTime = data._ytAPI.getCurrentTime();
 				if(data.currentTime != currentTime){
 					data.currentTime = currentTime;
-					$(mediaElm).trigger('timeupdate');
+					$.event.trigger('timeupdate', null, mediaElm, true);
 				}
-			}, 350);
+			}, 270);
 		};
 		
 		data._metatrys = 0;
@@ -569,7 +575,9 @@ mediaelement.createSWF = function(mediaElem, src, data){
 	var ytParams = getYtParams(src.src);
 	var hasControls = $.prop(mediaElem, 'controls');
 	var attrStyle = {};
-	
+
+	loadYTAPI();
+
 	if((attrStyle.height = $.attr(mediaElem, 'height') || '') || (attrStyle.width = $.attr(mediaElem, 'width') || '')){
 		$(mediaElem).css(attrStyle);
 		webshims.warn("width or height content attributes used. Webshims prefers the usage of CSS (computed styles or inline styles) to detect size of a video/audio. It's really more powerfull.");
@@ -739,8 +747,12 @@ mediaelement.createSWF = function(mediaElem, src, data){
 				var data = getYtDataFromElem(this);
 				if(data){
 					if(data._ytAPI && data._ytAPI[ytName]){
-						data._ytAPI[ytName]();
-						handlePlayPauseState(name, data);
+						if(assumeYTBug && !data.readyState && !data.networkState && data._ppFlag === undefined){
+							webshims.warn('youtube video play needs to be directly activated by user, if you use a video overlay set pointer-events to none.');
+						} else {
+							data._ytAPI[ytName]();
+							handlePlayPauseState(name, data);
+						}
 					}
 				} else {
 					return mediaSup[name].prop._supvalue.apply(this, arguments);

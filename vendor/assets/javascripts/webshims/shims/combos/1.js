@@ -479,6 +479,8 @@ webshims.isReady('swfmini', true);
 		}
 		return message || '';
 	};
+
+	webshims.refreshCustomValidityRules = $.noop;
 	
 	$.fn.getErrorMessage = function(key){
 		var message = '';
@@ -521,20 +523,6 @@ webshims.isReady('swfmini', true);
 	webshims.ready('DOM', function(){
 		if(document.querySelector('.ws-custom-file')){
 			webshims.reTest(['form-validation']);
-		}
-	});
-
-	$(function(){
-		var fileReaderReady = ('FileReader' in window && 'FormData' in window);
-		if(!fileReaderReady){
-			webshims.addReady(function(context){
-				if(!fileReaderReady && !modules.filereader.loaded && !modules.moxie.loaded){
-					if(context.querySelector('input.ws-filereader')){
-						webshims.reTest(['filereader', 'moxie']);
-						fileReaderReady = true;
-					}
-				}
-			});
 		}
 	});
 
@@ -606,9 +594,16 @@ webshims.isReady('swfmini', true);
 		})();
 	}
 
+	if(window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype){
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			cb.call(this, this);
+		};
+	}
+
 webshims.register('mediaelement-core', function($, webshims, window, document, undefined, options){
 	var hasSwf = swfmini.hasFlashPlayerVersion('11.3');
 	var mediaelement = webshims.mediaelement;
+	var allowYtLoading = false;
 	
 	mediaelement.parseRtmp = function(data){
 		var src = data.src.split('://');
@@ -704,7 +699,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		return function(){
 			if(loaded || !hasYt){return;}
 			loaded = true;
-			webshims.loader.loadScript("https://www.youtube.com/player_api");
+			if(allowYtLoading){
+				webshims.loader.loadScript("https://www.youtube.com/player_api");
+			}
 			$(function(){
 				webshims._polyfill(["mediaelement-yt"]);
 			});
@@ -890,6 +887,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				}
 			});
 			if(!requested && hasYt && !mediaelement.createSWF){
+				allowYtLoading = true;
 				loadYt();
 			}
 		};
@@ -1054,6 +1052,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 						.add(insertedElement.filter('video, audio'))
 						.each(function(){
 							if(!mediaelement.canNativePlaySrces(this)){
+								allowYtLoading = true;
 								loadThird();
 								handleMedia = true;
 								return false;
@@ -1076,6 +1075,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			mediaelement.loadDebugger();
 		});
 	}
+
 	//set native implementation ready, before swf api is retested
 	if(hasNative){
 		webshims.isReady('mediaelement-core', true);

@@ -32,7 +32,8 @@ webshims.register('form-validation', function($, webshims, window, document, und
 	var nonFormFilter = function(){
 		return !$.prop(this, 'form');
 	};
-	var getGroupElements = webshims.modules["form-core"].getGroupElements || function(elem){
+	var modules = webshims.modules;
+	var getGroupElements = modules["form-core"].getGroupElements || function(elem){
 		elem = $(elem);
 		var name;
 		var form;
@@ -116,7 +117,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				){
 					return;
 			}
-			if(webshims.refreshCustomValidityRules && webshims.refreshCustomValidityRules(elem) == 'async'){
+			if(webshims.refreshCustomValidityRules(elem) == 'async'){
 				$(elem).one('updatevalidation.webshims', switchValidityClass);
 				return;
 			}
@@ -207,8 +208,8 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		iVal.fieldWrapper = ':not(span):not(label):not(em):not(strong):not(p):not(.ws-custom-file)';
 	}
 
-	if(!webshims.modules["form-core"].getGroupElements){
-		webshims.modules["form-core"].getGroupElements = getGroupElements;
+	if(!modules["form-core"].getGroupElements){
+		modules["form-core"].getGroupElements = getGroupElements;
 	}
 
 	$(document.body || 'html')
@@ -364,7 +365,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 				this._shadowAdded = true;
 			}
 
-			element = $(element || this.options.prepareFor).getNativeElement() ;
+			element = $(element || this.options.prepareFor).getNativeElement();
 
 			var that = this;
 			var closeOnOutSide = function(e){
@@ -422,7 +423,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 					if(!appendElement && !invalidParent.test(parent.nodeName)){
 						appendElement = parent;
 					}
-					if(appendElement && $.css(parent, 'overflow') == 'hidden' && $.css(parent, 'position') != 'static'){
+					if(appendElement && $.css(parent, 'overflow') != 'visible' && $.css(parent, 'position') != 'static'){
 						appendElement = false;
 					}
 				}
@@ -971,7 +972,7 @@ webshims.register('form-validation', function($, webshims, window, document, und
 
 
 		$.data(this, 'wsCustomFile', {showSelected: showSelected});
-		$('button', $module).attr('tabindex', '-1');
+		$('button:not(.ws-capture-button)', $module).attr('tabindex', '-1');
 
 		$file
 			.on('change.webshim', showSelected)
@@ -992,6 +993,18 @@ webshims.register('form-validation', function($, webshims, window, document, und
 		}
 
 	}
+
+	$(function(){
+		var fileReaderReady = ('FileReader' in window && 'FormData' in window);
+		if(!fileReaderReady){
+			webshims.addReady(function(context){
+				if(!fileReaderReady && modules['filereader-xhr'] && !modules['filereader-xhr'].loaded && context.querySelector('input.ws-filereader')){
+					webshims.reTest(['filereader']);
+					fileReaderReady = true;
+				}
+			});
+		}
+	});
 
 	webshims.addReady(function(context, contextElem){
 		$(context.querySelectorAll('.ws-custom-file')).add($(contextElem).filter('.ws-custom-file')).each(customFile);

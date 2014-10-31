@@ -1,18 +1,15 @@
 webshim.register('usermedia-shim', function($, webshim, window, document, undefined, options){
 	"use strict";
 	var addMediaAPI;
-	var streamUrlPrefix = 'webshimstream';
 	var id = 0;
-	var streams = {};
 	var streamCb = {};
 	var hasSwf = swfmini.hasFlashPlayerVersion('11.3');
-	var mediaOptions = webshim.cfg.mediaelement;
 	var mediaelement = webshim.mediaelement;
 	var flashEvents = {
-		NOT_SUPPORTED_ERROR: 1,
-		PERMISSION_DENIED: 1,
+		NotSupportedError: 1,
+		PermissionDeniedError: 1,
 		//not implemented yet
-		MANDATORY_UNSATISFIED_ERROR: 1,
+		ConstraintNotSatisfiedError: 1,
 		onUserSuccess: 1
 	};
 	var noSource = function(){
@@ -51,6 +48,13 @@ webshim.register('usermedia-shim', function($, webshim, window, document, undefi
 		};
 
 		addMediaAPI();
+		/*
+		 { width: 650 },
+		 { width: { min: 650 }},
+		 { frameRate: 60 },
+		 { width: { max: 800 }},
+		 { facingMode: "user" }
+		 */
 		mediaelement.createSWF(media, {srcProp: src, streamrequest: true, type: 'jarisplayer/stream'});
 	}
 
@@ -73,6 +77,8 @@ webshim.register('usermedia-shim', function($, webshim, window, document, undefi
 
 
 	function LocalMediaStream(data, api, id){
+		data._cTNow = Date.now();
+		data._cTID = false;
 		webshim.defineProperties(this, {
 			_swf: {
 				value: api,
@@ -92,20 +98,34 @@ webshim.register('usermedia-shim', function($, webshim, window, document, undefi
 
 
 	LocalMediaStream.prototype = {
-		currentTime: 0,
 		stop: function(){
+			if(this._data._cTID){
+				clearInterval(this._data._cTID);
+			}
 			mediaelement.queueSwfMethod(this._data._elem, 'api_detach', [], this._data);
-		},
-		getAudioTracks: $.noop,
-		getVideoTracks: $.noop
+			this._data.ended = true;
+			$(this._data._elem).trigger('ended');
+		}
 	};
 
 
 	webshim.usermedia = {
 		attach: function(elem, canPlaySrc, data){
+			var $media;
 			if(data._usermedia == canPlaySrc.srcProp){
 				mediaelement.queueSwfMethod(data._elem, 'api_attach', [], data);
-				$(data._elem).trigger('loadstart');
+				$media = $(data._elem).trigger('loadstart');
+				data._cTID = setInterval(function(){
+					if(data.ended){
+						clearInterval(data._cTID);
+					} else if(!data.paused){
+						data.currentTime = (Date.now() - data._cTNow) / 1000;
+						$media.triggerHandler('timeupdate');
+					}
+				}, 250);
+				if(!data.paused){
+					mediaelement.queueSwfMethod(data._elem, 'api_play', [], data);
+				}
 			} else {
 				webshim.error('something went wrong');
 			}
@@ -120,30 +140,7 @@ webshim.register('usermedia-shim', function($, webshim, window, document, undefi
 		}
 	};
 
-	URL._nativeCreateObjectURL = URL.createObjectURL;
-	URL._nativeRevokeObjectURL = URL.revokeObjectURL;
 
-	URL.createObjectURL = function(stream){
-
-		var url = '';
-		if(URL._nativeCreateObjectURL && !stream._wsStreamId){
-			url = URL._nativeCreateObjectURL(stream);
-		} else if(stream._wsStreamId) {
-			url = stream._wsStreamId;
-			streams[url] = stream;
-		}
-		return url;
-	};
-
-	URL.revokeObjectURL = function(url){
-		if(streams[url]){
-			delete streams[url];
-		}
-		if(URL._nativeRevokeObjectURL){
-			return URL._nativeRevokeObjectURL(url);
-		}
-	};
-	webshim.usermediastreams = streams;
 
 	addMediaAPI = function(){
 		if(!webshim.mediaelement.createSWF){return;}
@@ -161,10 +158,10 @@ webshim.register('usermedia-shim', function($, webshim, window, document, undefi
 			streamCb[data._usermedia].fail({name: jaris.type});
 		};
 		$.extend(mediaelement.onEvent, {
-			NOT_SUPPORTED_ERROR: fail,
-			PERMISSION_DENIED: fail,
+			NotSupportedError: fail,
+			PermissionDeniedError: fail,
 			//not implemented yet
-			MANDATORY_UNSATISFIED_ERROR: fail,
+			ConstraintNotSatisfiedError: fail,
 			onUserSuccess: function(jaris, data){
 				revert(data);
 				streamCb[data._usermedia].success(new LocalMediaStream(data, data.api, data._usermedia));

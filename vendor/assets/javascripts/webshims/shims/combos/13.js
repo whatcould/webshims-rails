@@ -58,9 +58,16 @@
 		})();
 	}
 
+	if(window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype){
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			cb.call(this, this);
+		};
+	}
+
 webshims.register('mediaelement-core', function($, webshims, window, document, undefined, options){
 	var hasSwf = swfmini.hasFlashPlayerVersion('11.3');
 	var mediaelement = webshims.mediaelement;
+	var allowYtLoading = false;
 	
 	mediaelement.parseRtmp = function(data){
 		var src = data.src.split('://');
@@ -156,7 +163,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		return function(){
 			if(loaded || !hasYt){return;}
 			loaded = true;
-			webshims.loader.loadScript("https://www.youtube.com/player_api");
+			if(allowYtLoading){
+				webshims.loader.loadScript("https://www.youtube.com/player_api");
+			}
 			$(function(){
 				webshims._polyfill(["mediaelement-yt"]);
 			});
@@ -342,6 +351,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				}
 			});
 			if(!requested && hasYt && !mediaelement.createSWF){
+				allowYtLoading = true;
 				loadYt();
 			}
 		};
@@ -506,6 +516,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 						.add(insertedElement.filter('video, audio'))
 						.each(function(){
 							if(!mediaelement.canNativePlaySrces(this)){
+								allowYtLoading = true;
 								loadThird();
 								handleMedia = true;
 								return false;
@@ -528,6 +539,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			mediaelement.loadDebugger();
 		});
 	}
+
 	//set native implementation ready, before swf api is retested
 	if(hasNative){
 		webshims.isReady('mediaelement-core', true);
@@ -612,7 +624,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				var lastCue = this.cues[this.cues.length-1];
 				if(lastCue && lastCue.startTime > cue.startTime){
 					webshims.error("cue startTime higher than previous cue's startTime");
+					return;
 				}
+			}
+			if(cue.startTime >= cue.endTime ){
+				webshim.error('startTime >= endTime of cue: '+ cue.text);
 			}
 			if(cue.track && cue.track.removeCue){
 				cue.track.removeCue(cue);
@@ -654,10 +670,11 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 	var copyName = {srclang: 'language'};
 
 	var updateMediaTrackList = function(baseData, trackList){
+		var i, len;
+		var callChange = false;
 		var removed = [];
 		var added = [];
 		var newTracks = [];
-		var i, len;
 		if(!baseData){
 			baseData =  webshims.data(this, 'mediaelementBase') || webshims.data(this, 'mediaelementBase', {});
 		}
@@ -692,12 +709,13 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				removed.push(trackList[i]);
 			}
 		}
-		
+
 		if(removed.length || added.length){
 			trackList.splice(0);
 			
 			for(i = 0, len = newTracks.length; i < len; i++){
 				trackList.push(newTracks[i]);
+
 			}
 			for(i = 0, len = removed.length; i < len; i++){
 				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: removed[i]}));
@@ -705,9 +723,20 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			for(i = 0, len = added.length; i < len; i++){
 				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: added[i]}));
 			}
+			//todo: remove
 			if(baseData.scriptedTextTracks || removed.length){
 				$(this).triggerHandler('updatetrackdisplay');
 			}
+		}
+
+		for(i = 0, len = trackList.length; i < len; i++){
+			if(trackList[i].__wsmode != trackList[i].mode){
+				trackList[i].__wsmode = trackList[i].mode;
+				callChange = true;
+			}
+		}
+		if(callChange){
+			$([trackList]).triggerHandler('change');
 		}
 	};
 	
@@ -721,7 +750,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			setTimeout(function(){
 				$(track).closest('audio, video').triggerHandler('updatetrackdisplay');
 				trackData.isTriggering = false;
-			}, 1);
+			}, 9);
 		}
 	};
 	var isDefaultTrack = (function(){
@@ -914,15 +943,10 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 								error: error
 							});
 						};
-						if($.ajax && $.ajaxSettings.xhr){
-							if(isDisabled){
-								setTimeout(createAjax, loadingTracks * 2);
-							} else {
-								createAjax();
-							}
+						if(isDisabled){
+							setTimeout(createAjax, loadingTracks * 2);
 						} else {
-							webshims.ready('jajax', createAjax);
-							webshims.loader.loadList(['jajax']);
+							createAjax();
 						}
 					} catch(er){
 						error();

@@ -287,11 +287,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	webshims.assumeARIA = true;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
-		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
-	}
-	
-	if('debug' in webshims){
-		webshims.error('Use webshims.setOptions("debug", true||false||"noCombo"); to debug flag');
+		webshims.error("IE browser modes are busted in IE10+. Make sure to run IE in edge mode (X-UA-Compatible). Please test your HTML/CSS/JS with a real IE version or at least IETester or similar tools. ");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
@@ -329,20 +325,25 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	//jquery mobile and jquery ui
-	if(!$.widget){
+	if(!$.widget && (!$.pluginFactory || !$.pluginFactory.mixin)){
 		(function(){
 			var _cleanData = $.cleanData;
-			$.cleanData = function( elems ) {
-				if(!$.widget){
-					for ( var i = 0, elem; (elem = elems[i]) != null; i++ ) {
+			$.cleanData = (function( orig ) {
+				return function( elems ) {
+					var events, elem, i;
+					for ( i = 0; (elem = elems[i]) != null; i++ ) {
 						try {
-							$( elem ).triggerHandler( "remove" );
-						// http://bugs.jquery.com/ticket/8235
-						} catch( e ) {}
+							// Only trigger remove when necessary to save time
+							events = $._data( elem, "events" );
+							if ( events && events.remove ) {
+								$( elem ).triggerHandler( "remove" );
+							}
+							// http://bugs.jquery.com/ticket/8235
+						} catch ( e ) {}
 					}
-				}
-				_cleanData( elems );
-			};
+					orig( elems );
+				};
+			})( $.cleanData );
 		})();
 	}
 	
@@ -763,7 +764,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
-		domPrefixes: ["ws", "webkit", "moz", "ms", "o"],
+		domPrefixes: ["webkit", "moz", "ms", "o", "ws"],
 
 		prefixed: function (prop, obj){
 			var i, testProp;
@@ -904,33 +905,37 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				},
 				handler: (function(){
+					var evt;
 					var trigger = function(){
-						$(document).triggerHandler('updateshadowdom');
+						$(document).triggerHandler('updateshadowdom', [evt]);
+					};
+					var timed = function(){
+						if(evt && evt.type == 'resize'){
+							var width = $window.width();
+							var height = $window.width();
+
+							if(height == lastHeight && width == lastWidth){
+								return;
+							}
+							lastHeight = height;
+							lastWidth = width;
+						}
+
+						if(evt && evt.type != 'docresize'){
+							docObserve.height = docObserve.getHeight();
+							docObserve.width = docObserve.getWidth();
+						}
+
+						if(window.requestAnimationFrame){
+							requestAnimationFrame(trigger);
+						} else {
+							setTimeout(trigger, 0);
+						}
 					};
 					return function(e){
 						clearTimeout(resizeTimer);
-						resizeTimer = setTimeout(function(){
-							if(e.type == 'resize'){
-								var width = $window.width();
-								var height = $window.width();
-
-								if(height == lastHeight && width == lastWidth){
-									return;
-								}
-								lastHeight = height;
-								lastWidth = width;
-								
-								docObserve.height = docObserve.getHeight();
-								docObserve.width = docObserve.getWidth();
-							}
-
-							if(window.requestAnimationFrame){
-								requestAnimationFrame(trigger);
-							} else {
-								setTimeout(trigger, 0);
-							}
-							
-						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
+						evt = e;
+						resizeTimer = setTimeout(timed, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
 					};
 				})(),
 				_create: function(){
@@ -1710,6 +1715,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 		return message || '';
 	};
+
+	webshims.refreshCustomValidityRules = $.noop;
 	
 	$.fn.getErrorMessage = function(key){
 		var message = '';
@@ -1752,20 +1759,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	webshims.ready('DOM', function(){
 		if(document.querySelector('.ws-custom-file')){
 			webshims.reTest(['form-validation']);
-		}
-	});
-
-	$(function(){
-		var fileReaderReady = ('FileReader' in window && 'FormData' in window);
-		if(!fileReaderReady){
-			webshims.addReady(function(context){
-				if(!fileReaderReady && !modules.filereader.loaded && !modules.moxie.loaded){
-					if(context.querySelector('input.ws-filereader')){
-						webshims.reTest(['filereader', 'moxie']);
-						fileReaderReady = true;
-					}
-				}
-			});
 		}
 	});
 
@@ -1876,7 +1869,6 @@ var isPlaceholderOptionSelected = function(select){
 };
 
 var emptyJ = $([]);
-//TODO: cache + perftest
 var getGroupElements = function(elem){
 	elem = $(elem);
 	var name, form;
@@ -1946,7 +1938,7 @@ var validityRules = {
 $.each({tooShort: ['minLength', -1], tooLong: ['maxLength', 1]}, function(name, props){
 	validityRules[name] = function(input, val, cache){
 		//defaultValue is not the same as dirty flag, but very similiar
-		if(cache.nodeName == 'select' || input.prop('defaultValue') == val){return false;}
+		if(!val || cache.nodeName == 'select' || input.prop('defaultValue') == val){return false;}
 
 		cacheType(cache, input[0]);
 
@@ -2387,22 +2379,25 @@ if(webshims.support.inputtypes.date && /webkit/i.test(navigator.userAgent)){
 
 webshims.addReady(function(context, contextElem){
 	//start constrain-validation
-	var focusElem;
+
 	$('form', context)
 		.add(contextElem.filter('form'))
 		.on('invalid', $.noop)
 	;
-	
-	try {
-		if(context == document && !('form' in (document.activeElement || {}))) {
-			focusElem = $(context.querySelector('input[autofocus], select[autofocus], textarea[autofocus]')).eq(0).getShadowFocusElement()[0];
-			if (focusElem && focusElem.offsetHeight && focusElem.offsetWidth) {
-				focusElem.focus();
+
+	setTimeout(function(){
+		var focusElem;
+		try {
+			if(!('form' in (document.activeElement || {}))) {
+				focusElem = $(context.querySelector('input[autofocus], select[autofocus], textarea[autofocus]')).eq(0).getShadowFocusElement()[0];
+				if (focusElem && (focusElem.offsetHeight || focusElem.offsetWidth)) {
+					focusElem.focus();
+				}
 			}
 		}
-	} 
-	catch (er) {}
-	
+		catch (er) {}
+	}, 9);
+
 });
 
 if(!webshims.support.datalist){
@@ -3253,9 +3248,16 @@ webshims.defineNodeNamesProperties(['input', 'button'], formSubmitterDescriptors
 		})();
 	}
 
+	if(window.CanvasRenderingContext2D && CanvasRenderingContext2D.prototype){
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			cb.call(this, this);
+		};
+	}
+
 webshims.register('mediaelement-core', function($, webshims, window, document, undefined, options){
 	var hasSwf = swfmini.hasFlashPlayerVersion('11.3');
 	var mediaelement = webshims.mediaelement;
+	var allowYtLoading = false;
 	
 	mediaelement.parseRtmp = function(data){
 		var src = data.src.split('://');
@@ -3351,7 +3353,9 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 		return function(){
 			if(loaded || !hasYt){return;}
 			loaded = true;
-			webshims.loader.loadScript("https://www.youtube.com/player_api");
+			if(allowYtLoading){
+				webshims.loader.loadScript("https://www.youtube.com/player_api");
+			}
 			$(function(){
 				webshims._polyfill(["mediaelement-yt"]);
 			});
@@ -3537,6 +3541,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 				}
 			});
 			if(!requested && hasYt && !mediaelement.createSWF){
+				allowYtLoading = true;
 				loadYt();
 			}
 		};
@@ -3701,6 +3706,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 						.add(insertedElement.filter('video, audio'))
 						.each(function(){
 							if(!mediaelement.canNativePlaySrces(this)){
+								allowYtLoading = true;
 								loadThird();
 								handleMedia = true;
 								return false;
@@ -3723,6 +3729,7 @@ webshims.register('mediaelement-core', function($, webshims, window, document, u
 			mediaelement.loadDebugger();
 		});
 	}
+
 	//set native implementation ready, before swf api is retested
 	if(hasNative){
 		webshims.isReady('mediaelement-core', true);

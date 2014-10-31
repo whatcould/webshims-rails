@@ -7,10 +7,6 @@ webshims.ready('form-validation', function(){
 });
 
 (function(){
-	if(webshims.refreshCustomValidityRules){
-		webshims.error("form-validators already included. please remove custom-validity.js");
-	}
-
 	var customValidityRules = {};
 	var formReady = false;
 	var blockCustom;
@@ -261,8 +257,8 @@ webshims.ready('form-validation', function(){
 		if(!val || !pattern){return;}
 		return !(new RegExp('(' + pattern + ')', 'i').test(val));
 	}, 'This format is not allowed here.');
-	
-	if(!('tooShort' in ($('<input />').prop('validity') || {}))){
+
+	if($('<input />').prop('minLength') === undefined || !('tooShort' in ($('<input />').prop('validity') || {}))){
 		addCustomValidityRule('tooShort', function(elem, val){
 			var minlength;
 			if(!val || val == elem.defaultValue || !(minlength = elem.getAttribute('minlength'))){return;}
@@ -281,9 +277,12 @@ webshims.ready('form-validation', function(){
 			data.grouprequired.checkboxes
 				.off('click.groupRequired')
 				.on('click.groupRequired', function(){
-					webshims.refreshCustomValidityRules(elem);
+					if((data.customMismatchedRule == 'grouprequired') == this.checked){
+						$(elem).trigger('updatevalidation.webshims');
+					}
 				})
 			;
+
 			data.grouprequired.checkboxes.not(elem).removeData('grouprequired');
 		}
 
@@ -332,13 +331,11 @@ webshims.ready('form-validation', function(){
 	addCustomValidityRule('dependent', function(elem, val, data){
 		data = data.dependentValidation;
 		if( !data ){return;}
-		var specialVal;
 		var depFn = function(e){
 			var val = $.prop(data.masterElement, data["from-prop"]);
-			if(specialVal){
-				val = $.inArray(val, specialVal) !== -1;
-			}
-			if(data.toggle){
+			if(data.specialVal){
+				val = $.inArray(val, data.specialVal) !== -1;
+			} if(data.toggle){
 				val = !val;
 			}
 			$.prop( elem, data.prop, val);
@@ -370,14 +367,13 @@ webshims.ready('form-validation', function(){
 			}
 			
 			if(data["from-prop"].indexOf('value:') === 0){
-				specialVal = data["from-prop"].replace('value:', '').split('||');
+				data.specialVal = data["from-prop"].replace('value:', '').split('||');
 				data["from-prop"] = 'value';
-				
 			}
-			
+
 			data = $.data(elem, 'dependentValidation', $.extend({_init: true}, dependentDefaults, data));
 
-			if(data.prop !== "value" || specialVal){
+			if(data.prop !== "value" || data.specialVal){
 				$(data.masterElement.type === 'radio' && getGroupElements(data.masterElement) || data.masterElement).on('change', depFn);
 			} else {
 				$(data.masterElement).on('change', function(){
@@ -393,7 +389,7 @@ webshims.ready('form-validation', function(){
 			}
 		}
 
-		if(data.prop == "value" && !specialVal){
+		if(data.prop == "value" && !data.specialVal){
 			return ($.prop(data.masterElement, 'value') != val);
 		} else {
 			depFn();
@@ -412,7 +408,6 @@ webshims.ready('form-validation', function(){
 		if(!val || !data.ajaxvalidate){return;}
 		var opts;
 		if(!data.remoteValidate){
-			webshims.loader.loadList(['jajax']);
 			if(typeof data.ajaxvalidate == 'string'){
 				data.ajaxvalidate = {url: data.ajaxvalidate, depends: $([])};
 			} else {

@@ -64,11 +64,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	webshims.assumeARIA = true;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
-		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
-	}
-	
-	if('debug' in webshims){
-		webshims.error('Use webshims.setOptions("debug", true||false||"noCombo"); to debug flag');
+		webshims.error("IE browser modes are busted in IE10+. Make sure to run IE in edge mode (X-UA-Compatible). Please test your HTML/CSS/JS with a real IE version or at least IETester or similar tools. ");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
@@ -106,20 +102,25 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	//jquery mobile and jquery ui
-	if(!$.widget){
+	if(!$.widget && (!$.pluginFactory || !$.pluginFactory.mixin)){
 		(function(){
 			var _cleanData = $.cleanData;
-			$.cleanData = function( elems ) {
-				if(!$.widget){
-					for ( var i = 0, elem; (elem = elems[i]) != null; i++ ) {
+			$.cleanData = (function( orig ) {
+				return function( elems ) {
+					var events, elem, i;
+					for ( i = 0; (elem = elems[i]) != null; i++ ) {
 						try {
-							$( elem ).triggerHandler( "remove" );
-						// http://bugs.jquery.com/ticket/8235
-						} catch( e ) {}
+							// Only trigger remove when necessary to save time
+							events = $._data( elem, "events" );
+							if ( events && events.remove ) {
+								$( elem ).triggerHandler( "remove" );
+							}
+							// http://bugs.jquery.com/ticket/8235
+						} catch ( e ) {}
 					}
-				}
-				_cleanData( elems );
-			};
+					orig( elems );
+				};
+			})( $.cleanData );
 		})();
 	}
 	
@@ -540,7 +541,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
-		domPrefixes: ["ws", "webkit", "moz", "ms", "o"],
+		domPrefixes: ["webkit", "moz", "ms", "o", "ws"],
 
 		prefixed: function (prop, obj){
 			var i, testProp;
@@ -681,33 +682,37 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				},
 				handler: (function(){
+					var evt;
 					var trigger = function(){
-						$(document).triggerHandler('updateshadowdom');
+						$(document).triggerHandler('updateshadowdom', [evt]);
+					};
+					var timed = function(){
+						if(evt && evt.type == 'resize'){
+							var width = $window.width();
+							var height = $window.width();
+
+							if(height == lastHeight && width == lastWidth){
+								return;
+							}
+							lastHeight = height;
+							lastWidth = width;
+						}
+
+						if(evt && evt.type != 'docresize'){
+							docObserve.height = docObserve.getHeight();
+							docObserve.width = docObserve.getWidth();
+						}
+
+						if(window.requestAnimationFrame){
+							requestAnimationFrame(trigger);
+						} else {
+							setTimeout(trigger, 0);
+						}
 					};
 					return function(e){
 						clearTimeout(resizeTimer);
-						resizeTimer = setTimeout(function(){
-							if(e.type == 'resize'){
-								var width = $window.width();
-								var height = $window.width();
-
-								if(height == lastHeight && width == lastWidth){
-									return;
-								}
-								lastHeight = height;
-								lastWidth = width;
-								
-								docObserve.height = docObserve.getHeight();
-								docObserve.width = docObserve.getWidth();
-							}
-
-							if(window.requestAnimationFrame){
-								requestAnimationFrame(trigger);
-							} else {
-								setTimeout(trigger, 0);
-							}
-							
-						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
+						evt = e;
+						resizeTimer = setTimeout(timed, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
 					};
 				})(),
 				_create: function(){
@@ -2275,9 +2280,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			},
 			time: function(val, o, noCorrect){
 				var fVal, i;
+
 				if(val){
 
 					val = val.split(':');
+					if(val.length != 2 || isNaN(parseInt(val[0] || '', 10)) || isNaN(parseInt(val[1] || '', 10))){
+						return val.join(':');
+					}
 					if(curCfg.meridian){
 						fVal = (val[0] * 1);
 						if(fVal && fVal >= 12){
@@ -2432,6 +2441,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				createFormat('d');
 				var tmp, obj;
 				var ret = '';
+
 				if(opts.splitInput){
 					obj = {yy: 0, mm: 1, dd: 2};
 				} else {
@@ -2453,8 +2463,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 					ret = ([addZero(val[obj.yy]), addZero(val[obj.mm]), addZero(val[obj.dd])]).join('-');
 				}
-				return ret
-				;
+				return ret;
 			},
 			color: function(val, opts){
 				var ret = '#000000';
@@ -2756,9 +2765,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		};
 		
 		['defaultValue', 'value'].forEach(function(name){
+			var formatName = 'format'+name;
 			wsWidgetProto[name] = function(val, force){
-				if(!this._init || force || val !== this.options[name]){
-					this.element.prop(name, this.formatValue(val));
+				if(!this._init || force || val !== this.options[name] || this.options[formatName] != this.element.prop(name)){
+					this.options[formatName] = this.formatValue(val);
+					this.element.prop(name, this.options[formatName]);
 					this.options[name] = val;
 					this._propertyChange(name);
 					this.mirrorValidity();
@@ -2882,36 +2893,34 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			var isValue = name == 'value';
 			spinBtnProto[name] = function(val, force, isLive){
 				var selectionEnd;
-				if(!this._init || force || this.options[name] !== val){
-					if(isValue){
-						this._beforeValue(val);
-					} else {
-						this.elemHelper.prop(name, val);
-					}
-
-					val = formatVal[this.type](val, this.options);
-					if(this.options.splitInput){
-						$.each(this.splits, function(i, elem){
-							var setOption;
-							if(!(name in elem) && !isValue && $.nodeName(elem, 'select')){
-								$('option[value="'+ val[i] +'"]', elem).prop('defaultSelected', true);
-							} else {
-								$.prop(elem, name, val[i]);
-							}
-						});
-					} else {
-						val = this.toFixed(val);
-						if(isLive && this._getSelectionEnd){
-							selectionEnd = this._getSelectionEnd(val);
-						}
-						this.element.prop(name, val);
-						if(selectionEnd != null){
-							this.element.prop('selectionEnd', selectionEnd);
-						}
-					}
-					this._propertyChange(name);
-					this.mirrorValidity();
+				if(isValue){
+					this._beforeValue(val);
+				} else {
+					this.elemHelper.prop(name, val);
 				}
+
+				val = formatVal[this.type](val, this.options);
+				if(this.options.splitInput){
+					$.each(this.splits, function(i, elem){
+						var setOption;
+						if(!(name in elem) && !isValue && $.nodeName(elem, 'select')){
+							$('option[value="'+ val[i] +'"]', elem).prop('defaultSelected', true);
+						} else {
+							$.prop(elem, name, val[i]);
+						}
+					});
+				} else {
+					val = this.toFixed(val);
+					if(isLive && this._getSelectionEnd){
+						selectionEnd = this._getSelectionEnd(val);
+					}
+					this.element.prop(name, val);
+					if(selectionEnd != null){
+						this.element.prop('selectionEnd', selectionEnd);
+					}
+				}
+				this._propertyChange(name);
+				this.mirrorValidity();
 			};
 		});
 		
@@ -2979,6 +2988,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 						return handler.apply(this, arguments);
 					}
 				};
+				if($.isFunction(target)){
+					handler = target;
+					target = false;
+					this.on('click', runHandler);
+				} else {
+					this.on('click', target, runHandler);
+				}
 				if(addTouch){
 					allowClick = function(){
 						stopClick = false;
@@ -3027,17 +3043,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					this.each(function(){
 						this.addEventListener('touchstart', touchStart, true);
 					});
-				} else if(supportsTouchaction){
+				} else if(supportsTouchaction && !target){
 					this.css('touch-action', 'manipulation');
 				}
 
-				if($.isFunction(target)){
-					handler = target;
-					target = false;
-					this.on('click', runHandler);
-				} else {
-					this.on('click', target, runHandler);
-				}
+
 				return this;
 			};
 		})();
@@ -3045,7 +3055,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 	(function(){
 		var picker = {};
-		var assumeVirtualKeyBoard = (window.Modernizr && (Modernizr.touchevents || Modernizr.touch)) || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
+		var modern = window.Modernizr;
+		var assumeVirtualKeyBoard = (modern && (modern.touchevents || modern.touch)) || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
 		webshims.inlinePopover = {
 			_create: function(){
 				this.element = $('<div class="ws-inline-picker"><div class="ws-po-box" /></div>').data('wspopover', this);

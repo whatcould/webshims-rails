@@ -1660,9 +1660,13 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			},
 			time: function(val, o, noCorrect){
 				var fVal, i;
+
 				if(val){
 
 					val = val.split(':');
+					if(val.length != 2 || isNaN(parseInt(val[0] || '', 10)) || isNaN(parseInt(val[1] || '', 10))){
+						return val.join(':');
+					}
 					if(curCfg.meridian){
 						fVal = (val[0] * 1);
 						if(fVal && fVal >= 12){
@@ -1817,6 +1821,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 				createFormat('d');
 				var tmp, obj;
 				var ret = '';
+
 				if(opts.splitInput){
 					obj = {yy: 0, mm: 1, dd: 2};
 				} else {
@@ -1838,8 +1843,7 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 					}
 					ret = ([addZero(val[obj.yy]), addZero(val[obj.mm]), addZero(val[obj.dd])]).join('-');
 				}
-				return ret
-				;
+				return ret;
 			},
 			color: function(val, opts){
 				var ret = '#000000';
@@ -2141,9 +2145,11 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 		};
 		
 		['defaultValue', 'value'].forEach(function(name){
+			var formatName = 'format'+name;
 			wsWidgetProto[name] = function(val, force){
-				if(!this._init || force || val !== this.options[name]){
-					this.element.prop(name, this.formatValue(val));
+				if(!this._init || force || val !== this.options[name] || this.options[formatName] != this.element.prop(name)){
+					this.options[formatName] = this.formatValue(val);
+					this.element.prop(name, this.options[formatName]);
 					this.options[name] = val;
 					this._propertyChange(name);
 					this.mirrorValidity();
@@ -2267,36 +2273,34 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 			var isValue = name == 'value';
 			spinBtnProto[name] = function(val, force, isLive){
 				var selectionEnd;
-				if(!this._init || force || this.options[name] !== val){
-					if(isValue){
-						this._beforeValue(val);
-					} else {
-						this.elemHelper.prop(name, val);
-					}
-
-					val = formatVal[this.type](val, this.options);
-					if(this.options.splitInput){
-						$.each(this.splits, function(i, elem){
-							var setOption;
-							if(!(name in elem) && !isValue && $.nodeName(elem, 'select')){
-								$('option[value="'+ val[i] +'"]', elem).prop('defaultSelected', true);
-							} else {
-								$.prop(elem, name, val[i]);
-							}
-						});
-					} else {
-						val = this.toFixed(val);
-						if(isLive && this._getSelectionEnd){
-							selectionEnd = this._getSelectionEnd(val);
-						}
-						this.element.prop(name, val);
-						if(selectionEnd != null){
-							this.element.prop('selectionEnd', selectionEnd);
-						}
-					}
-					this._propertyChange(name);
-					this.mirrorValidity();
+				if(isValue){
+					this._beforeValue(val);
+				} else {
+					this.elemHelper.prop(name, val);
 				}
+
+				val = formatVal[this.type](val, this.options);
+				if(this.options.splitInput){
+					$.each(this.splits, function(i, elem){
+						var setOption;
+						if(!(name in elem) && !isValue && $.nodeName(elem, 'select')){
+							$('option[value="'+ val[i] +'"]', elem).prop('defaultSelected', true);
+						} else {
+							$.prop(elem, name, val[i]);
+						}
+					});
+				} else {
+					val = this.toFixed(val);
+					if(isLive && this._getSelectionEnd){
+						selectionEnd = this._getSelectionEnd(val);
+					}
+					this.element.prop(name, val);
+					if(selectionEnd != null){
+						this.element.prop('selectionEnd', selectionEnd);
+					}
+				}
+				this._propertyChange(name);
+				this.mirrorValidity();
 			};
 		});
 		
@@ -2364,6 +2368,13 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 						return handler.apply(this, arguments);
 					}
 				};
+				if($.isFunction(target)){
+					handler = target;
+					target = false;
+					this.on('click', runHandler);
+				} else {
+					this.on('click', target, runHandler);
+				}
 				if(addTouch){
 					allowClick = function(){
 						stopClick = false;
@@ -2412,17 +2423,11 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 					this.each(function(){
 						this.addEventListener('touchstart', touchStart, true);
 					});
-				} else if(supportsTouchaction){
+				} else if(supportsTouchaction && !target){
 					this.css('touch-action', 'manipulation');
 				}
 
-				if($.isFunction(target)){
-					handler = target;
-					target = false;
-					this.on('click', runHandler);
-				} else {
-					this.on('click', target, runHandler);
-				}
+
 				return this;
 			};
 		})();
@@ -2430,7 +2435,8 @@ webshims.register('form-number-date-api', function($, webshims, window, document
 
 	(function(){
 		var picker = {};
-		var assumeVirtualKeyBoard = (window.Modernizr && (Modernizr.touchevents || Modernizr.touch)) || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
+		var modern = window.Modernizr;
+		var assumeVirtualKeyBoard = (modern && (modern.touchevents || modern.touch)) || (/android|iphone|ipad|ipod|blackberry|iemobile/i.test(navigator.userAgent.toLowerCase()));
 		webshims.inlinePopover = {
 			_create: function(){
 				this.element = $('<div class="ws-inline-picker"><div class="ws-po-box" /></div>').data('wspopover', this);
