@@ -64,11 +64,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	webshims.assumeARIA = true;
 	
 	if($('<input type="email" />').attr('type') == 'text' || $('<form />').attr('novalidate') === "" || ('required' in $('<input />')[0].attributes)){
-		webshims.error("IE browser modes are busted in IE10+. Please test your HTML/CSS/JS with a real IE version or at least IETester or similiar tools");
-	}
-	
-	if('debug' in webshims){
-		webshims.error('Use webshims.setOptions("debug", true||false||"noCombo"); to debug flag');
+		webshims.error("IE browser modes are busted in IE10+. Make sure to run IE in edge mode (X-UA-Compatible). Please test your HTML/CSS/JS with a real IE version or at least IETester or similar tools. ");
 	}
 	
 	if (!webshims.cfg.no$Switch) {
@@ -106,20 +102,25 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 	
 	//jquery mobile and jquery ui
-	if(!$.widget){
+	if(!$.widget && (!$.pluginFactory || !$.pluginFactory.mixin)){
 		(function(){
 			var _cleanData = $.cleanData;
-			$.cleanData = function( elems ) {
-				if(!$.widget){
-					for ( var i = 0, elem; (elem = elems[i]) != null; i++ ) {
+			$.cleanData = (function( orig ) {
+				return function( elems ) {
+					var events, elem, i;
+					for ( i = 0; (elem = elems[i]) != null; i++ ) {
 						try {
-							$( elem ).triggerHandler( "remove" );
-						// http://bugs.jquery.com/ticket/8235
-						} catch( e ) {}
+							// Only trigger remove when necessary to save time
+							events = $._data( elem, "events" );
+							if ( events && events.remove ) {
+								$( elem ).triggerHandler( "remove" );
+							}
+							// http://bugs.jquery.com/ticket/8235
+						} catch ( e ) {}
 					}
-				}
-				_cleanData( elems );
-			};
+					orig( elems );
+				};
+			})( $.cleanData );
 		})();
 	}
 	
@@ -540,7 +541,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				return id;
 			};
 		})(),
-		domPrefixes: ["ws", "webkit", "moz", "ms", "o"],
+		domPrefixes: ["webkit", "moz", "ms", "o", "ws"],
 
 		prefixed: function (prop, obj){
 			var i, testProp;
@@ -681,33 +682,37 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 					}
 				},
 				handler: (function(){
+					var evt;
 					var trigger = function(){
-						$(document).triggerHandler('updateshadowdom');
+						$(document).triggerHandler('updateshadowdom', [evt]);
+					};
+					var timed = function(){
+						if(evt && evt.type == 'resize'){
+							var width = $window.width();
+							var height = $window.width();
+
+							if(height == lastHeight && width == lastWidth){
+								return;
+							}
+							lastHeight = height;
+							lastWidth = width;
+						}
+
+						if(evt && evt.type != 'docresize'){
+							docObserve.height = docObserve.getHeight();
+							docObserve.width = docObserve.getWidth();
+						}
+
+						if(window.requestAnimationFrame){
+							requestAnimationFrame(trigger);
+						} else {
+							setTimeout(trigger, 0);
+						}
 					};
 					return function(e){
 						clearTimeout(resizeTimer);
-						resizeTimer = setTimeout(function(){
-							if(e.type == 'resize'){
-								var width = $window.width();
-								var height = $window.width();
-
-								if(height == lastHeight && width == lastWidth){
-									return;
-								}
-								lastHeight = height;
-								lastWidth = width;
-								
-								docObserve.height = docObserve.getHeight();
-								docObserve.width = docObserve.getWidth();
-							}
-
-							if(window.requestAnimationFrame){
-								requestAnimationFrame(trigger);
-							} else {
-								setTimeout(trigger, 0);
-							}
-							
-						}, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
+						evt = e;
+						resizeTimer = setTimeout(timed, (e.type == 'resize' && !window.requestAnimationFrame) ? 50 : 9);
 					};
 				})(),
 				_create: function(){
@@ -1229,11 +1234,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	
 })();
 });
-;webshim.register('filereader', function($, webshim, window, document, undefined, featureOptions){
+;webshim.register('filereader-xhr', function($, webshim, window, document, undefined, featureOptions){
 	"use strict";
 	var mOxie, moxie, hasXDomain;
-	var FormData = $.noop;
-	var sel = 'input[type="file"].ws-filereader';
+	var sel = 'input[type="file"].ws-filereader, input[type="file"].ws-capture';
+	var hasFlash = swfmini.hasFlashPlayerVersion('10.3');
 	var loadMoxie = function (){
 		webshim.loader.loadList(['moxie']);
 	};
@@ -1345,7 +1350,7 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	);
 	var shimMoxiePath = webshim.cfg.basePath+'moxie/';
-	var crossXMLMessage = 'You nedd a crossdomain.xml to get all "filereader" / "XHR2" / "CORS" features to work. Or host moxie.swf/moxie.xap on your server an configure filereader options: "swfpath"/"xappath"';
+	var crossXMLMessage = 'You nedd a crossdomain.xml to get all "filereader" / "XHR2" / "CORS" features to work. Or host moxie.swf on your server an configure filereader options: "swfpath"';
 	var testMoxie = function(options){
 		return (options.wsType == 'moxie' || (options.data && options.data instanceof mOxie.FormData) || (options.crossDomain && $.support.cors !== false && hasXDomain != 'no' && !noxhr.test(options.dataType || '')));
 	};
@@ -1528,6 +1533,10 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		}
 	};
 
+	webshim.loader.addModule('moxie', {
+		src: 'moxie/js/moxie-'+ (hasFlash ? 'swf' : 'html4')
+	});
+
 	if(!featureOptions.progress){
 		featureOptions.progress = 'onprogress';
 	}
@@ -1538,9 +1547,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 	if(!featureOptions.swfpath){
 		featureOptions.swfpath = shimMoxiePath+'flash/Moxie.min.swf';
-	}
-	if(!featureOptions.xappath){
-		featureOptions.xappath = shimMoxiePath+'silverlight/Moxie.min.xap';
 	}
 
 	if($.support.cors !== false || !window.XDomainRequest){
@@ -1568,8 +1574,8 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				writeable: false,
 				get: function(){
 					if(this.type != 'file'){return null;}
-					if(!$(this).hasClass('ws-filereader')){
-						webshim.info("please add the 'ws-filereader' class to your input[type='file'] to implement files-property");
+					if(!$(this).is('.ws-filereader, .ws-capture')){
+						webshim.info("please add the 'ws-filereader'/'ws-capture' class to your input[type='file'] to implement files-property");
 					}
 					return webshim.data(this, 'fileList') || [];
 				}
@@ -1591,11 +1597,63 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	});
 
 	webshim.onNodeNamesPropertyModify('input', 'value', function(value, boolVal, type){
-		if(value === '' && this.type == 'file' && $(this).hasClass('ws-filereader')){
+		if(value === '' && this.type == 'file' && $(this).is('.ws-filereader, .ws-capture')){
 			webshim.data(this, 'fileList', []);
 		}
 	});
 
+	if(!document.createElement('canvas').toBlob){
+
+		webshim.defineNodeNameProperty('canvas', 'toBlob', {
+			prop: {
+				value: function(cb, type, qualitiy){
+					var dataURL;
+					var $canvas = $(this);
+					if(!type){
+						type = 'image/jpeg';
+					}
+					if(type == 'image/jpeg' && !qualitiy){
+						qualitiy = 0.8;
+					}
+					loadMoxie();
+					webshim.ready('moxie', function(){
+						var img = new mOxie.Image();
+						dataURL = $canvas.callProp('getAsDataURL', [type, qualitiy]);
+						img.onload = function() {
+							var blob = img.getAsBlob();
+							webshim.defineProperty(blob, '_wsDataURL', {
+								value: dataURL,
+								enumerable: false
+							});
+							cb(blob);
+						};
+						img.load(dataURL);
+					});
+				}
+			}
+		});
+
+		webshim.ready('url', function(){
+			var _nativeCreateObjectURL = URL.createObjectURL;
+			var _nativeRevokeObjectURL = URL.revokeObjectURL;
+
+			URL.createObjectURL = function(obj){
+				var url = obj;
+				if(obj._wsimgDataURL) {
+					url = obj._wsimgDataURL;
+				} else if(_nativeCreateObjectURL){
+					return _nativeCreateObjectURL.apply(this, arguments);
+				}
+				return url;
+			};
+
+			URL.revokeObjectURL = function(url){
+				if (_nativeRevokeObjectURL){
+					return _nativeRevokeObjectURL.apply(this, arguments);
+				}
+			};
+		});
+	}
 
 	window.FileReader = notReadyYet;
 	window.FormData = notReadyYet;
@@ -1605,7 +1663,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		mOxie = window.mOxie;
 
 		mOxie.Env.swf_url = featureOptions.swfpath;
-		mOxie.Env.xap_url = featureOptions.xappath;
 
 		window.FileReader = mOxie.FileReader;
 
@@ -1644,7 +1701,6 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 
 			return moxieData;
 		};
-		FormData = window.FormData;
 
 		createFilePicker = _createFilePicker;
 		transports.moxie = createMoxieTransport;
@@ -1829,12 +1885,13 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 	};
 
 
-	mediaelement.jarisEvent = {};
+	mediaelement.jarisEvent = mediaelement.jarisEvent || {};
 	var localConnectionTimer;
 	var onEvent = {
 		onPlayPause: function(jaris, data, override){
 			var playing, type;
 			var idled = data.paused || data.ended;
+
 			if(override == null){
 				try {
 					playing = data.api.api_get("isPlaying");
@@ -1848,12 +1905,15 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				type = data.paused ? 'pause' : 'play';
 				data._ppFlag = true;
 				trigger(data._elem, type);
+
+			}
+			if(!data.paused || playing == idled || playing == null){
 				if(data.readyState < 3){
 					setReadyState(3, data);
 				}
-				if(!data.paused){
-					trigger(data._elem, 'playing');
-				}
+			}
+			if(!data.paused){
+				trigger(data._elem, 'playing');
 			}
 		},
 		onSeek: function(jaris, data){
@@ -2605,11 +2665,11 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		clearTimeout(data.flashBlock);
 
-		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.115", false, vars, params, attrs, function(swfData){
+		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "11.3", false, vars, params, attrs, function(swfData){
 			if(swfData.success){
 				var fBlocker = function(){
-					if((!swfData.ref.parentNode && box[0].parentNode) || swfData.ref.style.display == "none"){
-						box.addClass('flashblocker-assumed');
+					if((!swfData.ref.parentNode) || swfData.ref.style.display == "none"){
+
 						$(elem).trigger('flashblocker');
 						webshims.warn("flashblocker assumed");
 					}
@@ -2838,13 +2898,43 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 			VIDEO: 1
 		};
 		var tested = {};
+		var addToBlob = function(){
+			var desc = webshim.defineNodeNameProperty('canvas', 'toBlob', {
+				prop: {
+					value: function(){
+						var context = $(this).callProp('getContext', ['2d']);
+						var that = this;
+						var args = arguments;
+						var cb = function(){
+							return desc.prop._supvalue.apply(that, args);
+						};
+						if(context.wsImageComplete && context._wsIsLoading){
+							context.wsImageComplete(cb);
+						} else {
+							return cb();
+						}
+					}
+				}
+			});
+		};
 
 		if(!_drawImage){
 			webshim.error('canvas.drawImage feature is needed. In IE8 flashvanvas pro can be used');
 		}
 
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			if(this._wsIsLoading){
+				if(!this._wsLoadingCbs){
+					this._wsLoadingCbs = [];
+				}
+				this._wsLoadingCbs.push(cb);
+			} else {
+				cb.call(this, this);
+			}
+		};
+
 		CanvasRenderingContext2D.prototype.drawImage = function(elem){
-			var data, img, args, imgData;
+			var data, img, args, imgData, hadCachedImg;
 			var context = this;
 
 			if(isVideo[elem.nodeName] && (data = webshims.data(elem, 'mediaelement')) && data.isActive == 'third' && data.api.api_image){
@@ -2862,24 +2952,51 @@ webshims.register('dom-extend', function($, webshims, window, document, undefine
 				}
 
 				args = slice.call(arguments, 1);
-				img = new Image();
+
+				if(options.canvasSync && data.canvasImg){
+					args.unshift(data.canvasImg);
+					_drawImage.apply(context, args);
+					args = slice.call(arguments, 1);
+					hadCachedImg = true;
+				}
+
+				img = document.createElement('img');
 
 				//todo find a performant sync way
 				img.onload = function(){
 					args.unshift(this);
-					_drawImage.apply(context, args);
 					img.onload = null;
+
+					if(options.canvasSync){
+						data.canvasImg = img;
+						if(hadCachedImg && options.noDoubbleDraw){
+							return;
+						}
+					}
+					_drawImage.apply(context, args);
+					context._wsIsLoading = false;
+					if(context._wsLoadingCbs && context._wsLoadingCbs.length){
+						while(context._wsLoadingCbs.length){
+							context._wsLoadingCbs.shift().call(context, context);
+						}
+					}
 				};
 
 				img.src = 'data:image/jpeg;base64,'+imgData;
-
-				if(img.complete){
+				this._wsIsLoading = true;
+				if(img.complete && img.onload){
 					img.onload();
 				}
 				return;
 			}
 			return _drawImage.apply(this, arguments);
 		};
+
+		if(!document.createElement('canvas').toBlob){
+			webshims.ready('filereader', addToBlob);
+		} else {
+			addToBlob();
+		}
 		return true;
 	};
 

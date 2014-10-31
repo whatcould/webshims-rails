@@ -124,12 +124,13 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 	};
 
 
-	mediaelement.jarisEvent = {};
+	mediaelement.jarisEvent = mediaelement.jarisEvent || {};
 	var localConnectionTimer;
 	var onEvent = {
 		onPlayPause: function(jaris, data, override){
 			var playing, type;
 			var idled = data.paused || data.ended;
+
 			if(override == null){
 				try {
 					playing = data.api.api_get("isPlaying");
@@ -143,12 +144,15 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 				type = data.paused ? 'pause' : 'play';
 				data._ppFlag = true;
 				trigger(data._elem, type);
+
+			}
+			if(!data.paused || playing == idled || playing == null){
 				if(data.readyState < 3){
 					setReadyState(3, data);
 				}
-				if(!data.paused){
-					trigger(data._elem, 'playing');
-				}
+			}
+			if(!data.paused){
+				trigger(data._elem, 'playing');
 			}
 		},
 		onSeek: function(jaris, data){
@@ -900,11 +904,11 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		clearTimeout(data.flashBlock);
 
-		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.115", false, vars, params, attrs, function(swfData){
+		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "11.3", false, vars, params, attrs, function(swfData){
 			if(swfData.success){
 				var fBlocker = function(){
-					if((!swfData.ref.parentNode && box[0].parentNode) || swfData.ref.style.display == "none"){
-						box.addClass('flashblocker-assumed');
+					if((!swfData.ref.parentNode) || swfData.ref.style.display == "none"){
+
 						$(elem).trigger('flashblocker');
 						webshims.warn("flashblocker assumed");
 					}
@@ -1133,13 +1137,43 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 			VIDEO: 1
 		};
 		var tested = {};
+		var addToBlob = function(){
+			var desc = webshim.defineNodeNameProperty('canvas', 'toBlob', {
+				prop: {
+					value: function(){
+						var context = $(this).callProp('getContext', ['2d']);
+						var that = this;
+						var args = arguments;
+						var cb = function(){
+							return desc.prop._supvalue.apply(that, args);
+						};
+						if(context.wsImageComplete && context._wsIsLoading){
+							context.wsImageComplete(cb);
+						} else {
+							return cb();
+						}
+					}
+				}
+			});
+		};
 
 		if(!_drawImage){
 			webshim.error('canvas.drawImage feature is needed. In IE8 flashvanvas pro can be used');
 		}
 
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			if(this._wsIsLoading){
+				if(!this._wsLoadingCbs){
+					this._wsLoadingCbs = [];
+				}
+				this._wsLoadingCbs.push(cb);
+			} else {
+				cb.call(this, this);
+			}
+		};
+
 		CanvasRenderingContext2D.prototype.drawImage = function(elem){
-			var data, img, args, imgData;
+			var data, img, args, imgData, hadCachedImg;
 			var context = this;
 
 			if(isVideo[elem.nodeName] && (data = webshims.data(elem, 'mediaelement')) && data.isActive == 'third' && data.api.api_image){
@@ -1157,24 +1191,51 @@ webshims.register('mediaelement-jaris', function($, webshims, window, document, 
 				}
 
 				args = slice.call(arguments, 1);
-				img = new Image();
+
+				if(options.canvasSync && data.canvasImg){
+					args.unshift(data.canvasImg);
+					_drawImage.apply(context, args);
+					args = slice.call(arguments, 1);
+					hadCachedImg = true;
+				}
+
+				img = document.createElement('img');
 
 				//todo find a performant sync way
 				img.onload = function(){
 					args.unshift(this);
-					_drawImage.apply(context, args);
 					img.onload = null;
+
+					if(options.canvasSync){
+						data.canvasImg = img;
+						if(hadCachedImg && options.noDoubbleDraw){
+							return;
+						}
+					}
+					_drawImage.apply(context, args);
+					context._wsIsLoading = false;
+					if(context._wsLoadingCbs && context._wsLoadingCbs.length){
+						while(context._wsLoadingCbs.length){
+							context._wsLoadingCbs.shift().call(context, context);
+						}
+					}
 				};
 
 				img.src = 'data:image/jpeg;base64,'+imgData;
-
-				if(img.complete){
+				this._wsIsLoading = true;
+				if(img.complete && img.onload){
 					img.onload();
 				}
 				return;
 			}
 			return _drawImage.apply(this, arguments);
 		};
+
+		if(!document.createElement('canvas').toBlob){
+			webshims.ready('filereader', addToBlob);
+		} else {
+			addToBlob();
+		}
 		return true;
 	};
 

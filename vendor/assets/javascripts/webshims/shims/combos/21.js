@@ -92,52 +92,46 @@
 						}
 						return;
 					}
-					createAjax = function(){
-						$.ajax({
-							url: 'http://freegeoip.net/json/',
-							dataType: 'jsonp',
-							cache: true,
-							jsonp: 'callback',
-							success: function(data){
-								locationAPIs--;
-								if(!data){return;}
-								pos = pos || {
-									coords: {
-										latitude: data.latitude,
-										longitude: data.longitude,
-										altitude: null,
-										accuracy: 43000,
-										altitudeAccuracy: null,
-										heading: parseInt('NaN', 10),
-										velocity: null
-									},
-									//extension similiar to FF implementation
-									address: {
-										city: data.city,
-										country: data.country_name,
-										countryCode: data.country_code,
-										county: "",
-										postalCode: data.zipcode,
-										premises: "",
-										region: data.region_name,
-										street: "",
-										streetNumber: ""
-									}
-								};
-								endCallback();
-							},
-							error: function(){
-								locationAPIs--;
-								endCallback();
-							}
-						});
-					};
-					if($.ajax){
-						createAjax();
-					} else {
-						webshims.ready('jajax', createAjax);
-						webshims.loader.loadList(['jajax']);
-					}
+
+					$.ajax({
+						url: 'http://freegeoip.net/json/',
+						dataType: 'jsonp',
+						cache: true,
+						jsonp: 'callback',
+						success: function(data){
+							locationAPIs--;
+							if(!data){return;}
+							pos = pos || {
+								coords: {
+									latitude: data.latitude,
+									longitude: data.longitude,
+									altitude: null,
+									accuracy: 43000,
+									altitudeAccuracy: null,
+									heading: parseInt('NaN', 10),
+									velocity: null
+								},
+								//extension similiar to FF implementation
+								address: {
+									city: data.city,
+									country: data.country_name,
+									countryCode: data.country_code,
+									county: "",
+									postalCode: data.zipcode,
+									premises: "",
+									region: data.region_name,
+									street: "",
+									streetNumber: ""
+								}
+							};
+							endCallback();
+						},
+						error: function(){
+							locationAPIs--;
+							endCallback();
+						}
+					});
+
 					clearTimeout(googleTimer);
 					if (!window.google || !window.google.loader) {
 						googleTimer = setTimeout(function(){
@@ -179,10 +173,7 @@
 		};
 		return api;
 	})());
-	
-	webshims.ready('WINDOWLOAD', function(){
-		webshims.loader.loadList(['jajax']);
-	});
+
 	webshims.isReady('geolocation', true);
 })(webshims.$);
 ;webshims.register('details', function($, webshims, window, doc, undefined, options){
@@ -459,12 +450,13 @@
 	};
 
 
-	mediaelement.jarisEvent = {};
+	mediaelement.jarisEvent = mediaelement.jarisEvent || {};
 	var localConnectionTimer;
 	var onEvent = {
 		onPlayPause: function(jaris, data, override){
 			var playing, type;
 			var idled = data.paused || data.ended;
+
 			if(override == null){
 				try {
 					playing = data.api.api_get("isPlaying");
@@ -478,12 +470,15 @@
 				type = data.paused ? 'pause' : 'play';
 				data._ppFlag = true;
 				trigger(data._elem, type);
+
+			}
+			if(!data.paused || playing == idled || playing == null){
 				if(data.readyState < 3){
 					setReadyState(3, data);
 				}
-				if(!data.paused){
-					trigger(data._elem, 'playing');
-				}
+			}
+			if(!data.paused){
+				trigger(data._elem, 'playing');
 			}
 		},
 		onSeek: function(jaris, data){
@@ -1235,11 +1230,11 @@
 		options.changeSWF(vars, elem, canPlaySrc, data, 'embed');
 		clearTimeout(data.flashBlock);
 
-		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "9.0.115", false, vars, params, attrs, function(swfData){
+		swfmini.embedSWF(playerSwfPath, elemId, "100%", "100%", "11.3", false, vars, params, attrs, function(swfData){
 			if(swfData.success){
 				var fBlocker = function(){
-					if((!swfData.ref.parentNode && box[0].parentNode) || swfData.ref.style.display == "none"){
-						box.addClass('flashblocker-assumed');
+					if((!swfData.ref.parentNode) || swfData.ref.style.display == "none"){
+
 						$(elem).trigger('flashblocker');
 						webshims.warn("flashblocker assumed");
 					}
@@ -1468,13 +1463,43 @@
 			VIDEO: 1
 		};
 		var tested = {};
+		var addToBlob = function(){
+			var desc = webshim.defineNodeNameProperty('canvas', 'toBlob', {
+				prop: {
+					value: function(){
+						var context = $(this).callProp('getContext', ['2d']);
+						var that = this;
+						var args = arguments;
+						var cb = function(){
+							return desc.prop._supvalue.apply(that, args);
+						};
+						if(context.wsImageComplete && context._wsIsLoading){
+							context.wsImageComplete(cb);
+						} else {
+							return cb();
+						}
+					}
+				}
+			});
+		};
 
 		if(!_drawImage){
 			webshim.error('canvas.drawImage feature is needed. In IE8 flashvanvas pro can be used');
 		}
 
+		CanvasRenderingContext2D.prototype.wsImageComplete = function(cb){
+			if(this._wsIsLoading){
+				if(!this._wsLoadingCbs){
+					this._wsLoadingCbs = [];
+				}
+				this._wsLoadingCbs.push(cb);
+			} else {
+				cb.call(this, this);
+			}
+		};
+
 		CanvasRenderingContext2D.prototype.drawImage = function(elem){
-			var data, img, args, imgData;
+			var data, img, args, imgData, hadCachedImg;
 			var context = this;
 
 			if(isVideo[elem.nodeName] && (data = webshims.data(elem, 'mediaelement')) && data.isActive == 'third' && data.api.api_image){
@@ -1492,24 +1517,51 @@
 				}
 
 				args = slice.call(arguments, 1);
-				img = new Image();
+
+				if(options.canvasSync && data.canvasImg){
+					args.unshift(data.canvasImg);
+					_drawImage.apply(context, args);
+					args = slice.call(arguments, 1);
+					hadCachedImg = true;
+				}
+
+				img = document.createElement('img');
 
 				//todo find a performant sync way
 				img.onload = function(){
 					args.unshift(this);
-					_drawImage.apply(context, args);
 					img.onload = null;
+
+					if(options.canvasSync){
+						data.canvasImg = img;
+						if(hadCachedImg && options.noDoubbleDraw){
+							return;
+						}
+					}
+					_drawImage.apply(context, args);
+					context._wsIsLoading = false;
+					if(context._wsLoadingCbs && context._wsLoadingCbs.length){
+						while(context._wsLoadingCbs.length){
+							context._wsLoadingCbs.shift().call(context, context);
+						}
+					}
 				};
 
 				img.src = 'data:image/jpeg;base64,'+imgData;
-
-				if(img.complete){
+				this._wsIsLoading = true;
+				if(img.complete && img.onload){
 					img.onload();
 				}
 				return;
 			}
 			return _drawImage.apply(this, arguments);
 		};
+
+		if(!document.createElement('canvas').toBlob){
+			webshims.ready('filereader', addToBlob);
+		} else {
+			addToBlob();
+		}
 		return true;
 	};
 
@@ -1737,7 +1789,11 @@
 				var lastCue = this.cues[this.cues.length-1];
 				if(lastCue && lastCue.startTime > cue.startTime){
 					webshims.error("cue startTime higher than previous cue's startTime");
+					return;
 				}
+			}
+			if(cue.startTime >= cue.endTime ){
+				webshim.error('startTime >= endTime of cue: '+ cue.text);
 			}
 			if(cue.track && cue.track.removeCue){
 				cue.track.removeCue(cue);
@@ -1779,10 +1835,11 @@
 	var copyName = {srclang: 'language'};
 
 	var updateMediaTrackList = function(baseData, trackList){
+		var i, len;
+		var callChange = false;
 		var removed = [];
 		var added = [];
 		var newTracks = [];
-		var i, len;
 		if(!baseData){
 			baseData =  webshims.data(this, 'mediaelementBase') || webshims.data(this, 'mediaelementBase', {});
 		}
@@ -1817,12 +1874,13 @@
 				removed.push(trackList[i]);
 			}
 		}
-		
+
 		if(removed.length || added.length){
 			trackList.splice(0);
 			
 			for(i = 0, len = newTracks.length; i < len; i++){
 				trackList.push(newTracks[i]);
+
 			}
 			for(i = 0, len = removed.length; i < len; i++){
 				$([trackList]).triggerHandler($.Event({type: 'removetrack', track: removed[i]}));
@@ -1830,9 +1888,20 @@
 			for(i = 0, len = added.length; i < len; i++){
 				$([trackList]).triggerHandler($.Event({type: 'addtrack', track: added[i]}));
 			}
+			//todo: remove
 			if(baseData.scriptedTextTracks || removed.length){
 				$(this).triggerHandler('updatetrackdisplay');
 			}
+		}
+
+		for(i = 0, len = trackList.length; i < len; i++){
+			if(trackList[i].__wsmode != trackList[i].mode){
+				trackList[i].__wsmode = trackList[i].mode;
+				callChange = true;
+			}
+		}
+		if(callChange){
+			$([trackList]).triggerHandler('change');
 		}
 	};
 	
@@ -1846,7 +1915,7 @@
 			setTimeout(function(){
 				$(track).closest('audio, video').triggerHandler('updatetrackdisplay');
 				trackData.isTriggering = false;
-			}, 1);
+			}, 9);
 		}
 	};
 	var isDefaultTrack = (function(){
@@ -2039,15 +2108,10 @@
 								error: error
 							});
 						};
-						if($.ajax && $.ajaxSettings.xhr){
-							if(isDisabled){
-								setTimeout(createAjax, loadingTracks * 2);
-							} else {
-								createAjax();
-							}
+						if(isDisabled){
+							setTimeout(createAjax, loadingTracks * 2);
 						} else {
-							webshims.ready('jajax', createAjax);
-							webshims.loader.loadList(['jajax']);
+							createAjax();
 						}
 					} catch(er){
 						error();
