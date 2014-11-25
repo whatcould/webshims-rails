@@ -43,10 +43,10 @@ Users of previous webshims-rails versions should update their sprockets requires
 
 h2. Updating
 
-There's a quick-and-dirty rake task in the repository to checkout webshims from github, checkout a git ref, and copy the required scripts over.
+There's a quick-and-dirty rake task in the repository to checkout webshims from github, checkout a git ref, and copy the required scripts over. You need to specify the Webshims-rails version and the git reference (version/tag/sha) from the webshims repository.
 
 <pre>
-  rake update VERSION=1.14.5
+  rake update VERSION=1.14.5 REF=1.14.5
 </pre>
 
 h2. License

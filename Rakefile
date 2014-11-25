@@ -39,7 +39,7 @@ EOT
   end
 
 
-  puts "Ok, check your work. If you are the gem owner, run rake :push VERSION=#{version} to generate and push the gem."
+  puts "Ok, check your work. If you are the gem owner, run rake push VERSION=#{version} to generate and push the gem."
   input = STDIN.gets.strip
 end
 
