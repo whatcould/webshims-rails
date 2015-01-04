@@ -22,16 +22,13 @@ $.webshims.setOptions('basePath', '/webshims/shims/')
 h2. Usage
 
 1. Add webshims-rails to your Gemfile for bundler: @gem 'webshims-rails'@
-2. Require modernizr and the webshims polyfiller, eg, in your application.js:
+2. Require the webshims polyfiller, eg, in your application.js:
 
 <pre>
-//= require webshims/extras/modernizr-custom
 //= require webshims/polyfiller
 </pre>
 
-*Update note:* Previous webshims-rails included only the minified versions; this was incorrect, since the dev (unminified) versions should be required by Sprockets and then the Rails asset pipeline will minify as necessary in production. The unminified ('dev') versions have been moved up a directory to simplify the require paths.
-
-Users of previous webshims-rails versions should update their sprockets requires and webshims options as below (though I'll leave the minified assets in there to prevent errors).
+*Update note:* Previous webshims versions included a custom modernizr build; this was removed in webshims 1.14.6, so the (previously necessary) `require webshims/extras/modernizr-custom` line should be removed, and if your app requires modernizr, you'll have to build and require it yourself.
 
 3. In your javascript, after the polyfiller has been required, set the basePath for webshims as shown below, and then call $.webshims.polyfill(); see webshims docs for more options.
 (Note that this should be run directly, not in a dom-ready block.)
