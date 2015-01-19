@@ -41,6 +41,13 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   $.webshims.polyfill()
   ```
 
+4. For Turbolinks users only: you'll need to update the polyfill on page load:
+
+  ```coffeescript
+  $(document).on "page:load", ->
+    $(this).updatePolyfill()
+  ```
+
 ## Updating this gem
 
 This is only in the case this repository is not up-to-date; I try to stay current with webshims but sometimes I miss the webshims releases.
