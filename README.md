@@ -37,9 +37,11 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
    (Note that this should be run directly, not in a dom-ready block.)
 
   ```javascript
-  $.webshims.setOptions('basePath', '/assets/webshims/shims/')
+  $.webshims.setOptions('basePath', '/assets/webshims/shims/1.15.6/')
   $.webshims.polyfill()
   ```
+
+   The version number above should match the version of Webshims. When you update the gem make sure to change this so browser-cached files will be reloaded. If you are interpolating your JavaScript, you can use the helper `webshims_path` to automatically populate the version number.
 
 4. For Turbolinks users only: you'll need to update the polyfill on page load:
 

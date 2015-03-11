@@ -1,4 +1,6 @@
 require "webshims-rails/version"
+require "webshims-rails/view-helpers"
+require "webshims-rails/rewrite"
 
 module Webshims
   module Rails
@@ -11,6 +13,10 @@ module Webshims
         initializer :append_webshims_assets_path, :group => :all do |app|
           app.config.assets.precompile << /webshims/
         end
+      end
+
+      initializer "Webshims::Rails::ViewHelpers" do
+        ActiveSupport.on_load(:action_view) { include Webshims::Rails::ViewHelpers }
       end
     end
   end
