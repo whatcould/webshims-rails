@@ -37,7 +37,7 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
    (Note that this should be run directly, not in a dom-ready block.)
 
   ```javascript
-  $.webshims.setOptions('basePath', '/assets/webshims/shims/1.15.6/')
+  $.webshims.setOptions('basePath', '/webshims/shims/1.15.6/')
   $.webshims.polyfill()
   ```
 
