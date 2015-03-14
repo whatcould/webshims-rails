@@ -50,6 +50,21 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
     $(this).updatePolyfill()
   ```
 
+5. For Spork users, if you have a line to reload your routes for each spec run in your `spec_helper`:
+
+  ```ruby
+  Spork.each_run do
+    # This code will be run each time you run your specs.
+    load "#{Rails.root}/config/routes.rb"
+  end
+  ```
+
+   Then you need to add the `mount` to your `config/routes.rb` otherwise it gets removed by Spork's reload.
+
+   ```ruby
+   mount Webshims::Rails::Rewrite.new, at: '/webshims/shims'
+   ```
+
 ## Updating this gem
 
 This is only in the case this repository is not up-to-date; I try to stay current with webshims but sometimes I miss the webshims releases.
