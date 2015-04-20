@@ -1,6 +1,7 @@
 2015-04-20
 -------------------
 * Added minified version of webshims library to lib/assets; updated the rake task `rake webshims:update_public` to copy the minified versions over to /public, since these files are not precompiled.
+* Added update_public_versioned to copy webshims assets to version-namespaced directory, preventing upstream caching issues
 
 2015-01-19
 -------------------

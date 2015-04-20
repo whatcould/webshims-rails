@@ -6,9 +6,30 @@ Easily include the [webshims library](http://aFarkas.github.com/webshim/demos/in
 
 With the release of Rails 4 and an updated [sprockets-rails](https://github.com/rails/sprockets-rails#changes-from-rails-3x gem), only digest filenames are compiled when running rake assets:precompile (non-digest filenames are no longer compiled).
 
-Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode, since webshims dynamically chooses shim javascript files to request depending on the browser. To avoid this, you have two options:
+Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode, since webshims dynamically chooses shim javascript files to request depending on the browser. To avoid this, you have three options:
 
-1. Run this rake task every time you update webshims:
+1a. **Recommended**: Versioned-copy to /public. Run this rake task every time you update webshims:
+
+  ```bash
+  rake webshims:update_public_versioned
+  ```
+
+  This copies the webshims files (minified versions) into your Rails public/ directory, at `public/webshims/[webshims.verison]`. Scoping the webshims files to the webshims path will prevent browsers from caching old webshims code.
+
+  Then, alter step 3 below to re-configure your basePath from public/assets (as it was in Rails 3.X) to public/:
+
+  ```javascript
+  $.webshims.setOptions('basePath', '/webshims/[webshims-version]/shims/')
+  ```
+
+  You can add an .erb extention to your javascript file and have it set the webshims version path.
+
+  ```javascript
+  $.webshims.setOptions('basePath', '/webshims/<%= Webshims::Rails::WEBSHIMS_VERSION %>/shims/')
+  ```
+
+
+1B. [This is the older, simpler version of 1a.] Copy webshims to the /public directory. Run this rake task every time you update webshims:
 
   ```bash
   rake webshims:update_public
