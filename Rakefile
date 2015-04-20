@@ -20,7 +20,10 @@ task :update do
   git checkout #{ref}
   cd ../..
   rm -rf vendor/assets/javascripts/webshims
-  mv tmp/webshim/src vendor/assets/javascripts/webshims
+  mv tmp/webshim/js-webshim/dev vendor/assets/javascripts/webshims
+  rm -rf lib/assets/javascripts/webshims
+  mv tmp/webshim/js-webshim/minified lib/assets/javascripts/webshims
+
 EOT
   system cmd
 

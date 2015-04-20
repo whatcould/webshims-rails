@@ -1,12 +1,12 @@
 # Webshims-rails
 
-Easily include the "webshims library":http://aFarkas.github.com/webshim/demos/index.html (by Alexander Farkas) in your Rails 3.1+ project with the asset pipeline.
+Easily include the [webshims library](http://aFarkas.github.com/webshim/demos/index.html) (by Alexander Farkas) in your Rails 3.1+ project with the asset pipeline.
 
 ## Note on Changes in Rails 4
 
 With the release of Rails 4 and an updated [sprockets-rails](https://github.com/rails/sprockets-rails#changes-from-rails-3x gem), only digest filenames are compiled when running rake assets:precompile (non-digest filenames are no longer compiled).
 
-Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode. To avoid this, you have two options:
+Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode, since webshims dynamically chooses shim javascript files to request depending on the browser. To avoid this, you have two options:
 
 1. Run this rake task every time you update webshims:
 
@@ -14,7 +14,7 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   rake webshims:update_public
   ```
 
-  This copies the webshims directory into the public/ directory. Then, alter step 3 below to re-configure your basePath from public/assets (as it was in Rails 3.X) to public/:
+  This copies the webshims files (minified versions) into your Rails public/ directory, at `public/webshims`. Then, alter step 3 below to re-configure your basePath from public/assets (as it was in Rails 3.X) to public/:
 
   ```javascript
   $.webshims.setOptions('basePath', '/webshims/shims/')
