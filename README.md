@@ -6,7 +6,7 @@ Easily include the [webshims library](http://aFarkas.github.com/webshim/demos/in
 
 With the release of Rails 4 and an updated [sprockets-rails](https://github.com/rails/sprockets-rails#changes-from-rails-3x gem), only digest filenames are compiled when running rake assets:precompile (non-digest filenames are no longer compiled).
 
-Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode, since webshims dynamically chooses shim javascript files to request depending on the browser. To avoid this, you have three options:
+Since webshims does not support fingerprinting, this will result in 404s (missing assets) in production mode, since webshims dynamically chooses shim javascript files to request depending on the browser. To avoid this, you have four options:
 
 1a. **Recommended**: Versioned-copy to /public. Run this rake task every time you update webshims:
 
@@ -29,7 +29,7 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   ```
 
 
-1B. [This is the older, simpler version of 1a.] Copy webshims to the /public directory. Run this rake task every time you update webshims:
+1b. [This is the older, simpler version of 1a.] Copy webshims to the /public directory. Run this rake task every time you update webshims:
 
   ```bash
   rake webshims:update_public
@@ -40,8 +40,10 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   ```javascript
   $.webshims.setOptions('basePath', '/webshims/shims/')
   ```
-2. Or, turn (back) on asset compiling with non-digest filenames, with, for example, this gist: https://gist.github.com/eric1234/5692456. Don't forget that, if you go this direction, you'll also have to add webshims to the assets that are precompiled by default: `config.assets.precompile << /webshims/` in application.rb.
 
+2. Turn (back) on asset compiling with non-digest filenames, with, for example, this gist: https://gist.github.com/eric1234/5692456. Don't forget that, if you go this direction, you'll also have to add webshims to the assets that are precompiled by default: `config.assets.precompile << /webshims/` in application.rb.
+
+3. Or, only turn on asset compiling with non-digest filenames for the webshims assets.  Putting the contents of this gist into lib/tasks/ will work: https://gist.github.com/Hainish/0b46a170aec3c8129290.  Unlike the above, you do *not* have to add anything to the precompile assets in application.rb.
 
 ## Usage
 
