@@ -12,6 +12,14 @@ module Webshims
           app.config.assets.precompile << /webshims/
         end
       end
+
+      def self.mountable_assets_directory
+        proc do |env|
+          Rack::Directory.new(
+            root.join("vendor", "assets", "javascripts", "webshims")
+          ).call(env)
+        end
+      end
     end
   end
 end

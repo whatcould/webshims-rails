@@ -42,6 +42,23 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   ```
 2. Or, turn (back) on asset compiling with non-digest filenames, with, for example, this gist: https://gist.github.com/eric1234/5692456. Don't forget that, if you go this direction, you'll also have to add webshims to the assets that are precompiled by default: `config.assets.precompile << /webshims/` in application.rb.
 
+3. Or, mount the webshims assets to your application. This bypasses the assests pipeline and exposes the internal copies of the assets from directly within webshims-rails.
+
+  Mount the assets within ```routes.rb```
+
+  ```
+  Rails.application.routes.draw do
+    mount Webshims::Rails::Engine.mountable_assets_directory => '/webshims'
+    ...
+  end
+  ```
+
+  Define the mounted path as the ```basePath``` for webshims.
+
+  ```javascript
+  $.webshims.setOptions('basePath', '/webshims/shims/')
+  ```
+
 
 ## Usage
 
