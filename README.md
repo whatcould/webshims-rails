@@ -22,12 +22,7 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   $.webshims.setOptions('basePath', '/webshims/[webshims-version]/shims/')
   ```
 
-  You can add an .erb extention to your javascript file and have it set the webshims version path.
-
-  ```javascript
-  $.webshims.setOptions('basePath', '/webshims/<%= Webshims::Rails::WEBSHIMS_VERSION %>/shims/')
-  ```
-
+  NOTE: Previously we recommended setting the version with ERB; unfortunately, this is likely to backfire in many situations. Due to Sprockets caching of asset fingerprints, if nothing else is changed in your ERB file, the version will not get updated.
 
 1b. [This is the older, simpler version of 1a.] Copy webshims to the /public directory. Run this rake task every time you update webshims:
 

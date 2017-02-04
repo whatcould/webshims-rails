@@ -19,5 +19,4 @@ task "webshims:update_public_versioned" do
   puts "Updated webshims files in /public/webshims/#{Webshims::Rails::WEBSHIMS_VERSION}/"
   puts "\nBe sure your webshims options are set as follows:"
   puts %Q{    $.webshims.setOptions('basePath', '/webshims/#{Webshims::Rails::WEBSHIMS_VERSION}/shims/')}
-  puts "\nYou can use ERB to dynamically set this path; See README for more information."
 end
