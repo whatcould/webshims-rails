@@ -55,9 +55,11 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
    (Note that this should be run directly, not in a dom-ready block.)
 
   ```javascript
-  $.webshims.setOptions('basePath', '/assets/webshims/shims/')
+  $.webshims.setOptions('basePath', '/webshims/shims/1.15.6/')
   $.webshims.polyfill()
   ```
+
+   The version number above should match the version of Webshims. When you update the gem change this so browser-cached files get reloaded. If you are interpolating your JavaScript, you can use the helper `webshims_path` to automatically populate the path with version number.
 
 4. For Turbolinks users only: you'll need to update the polyfill on page load:
 
@@ -65,6 +67,21 @@ Since webshims does not support fingerprinting, this will result in 404s (missin
   $(document).on "page:load", ->
     $(this).updatePolyfill()
   ```
+
+5. For Spork users, if you have a line to reload your routes for each spec run in your `spec_helper`:
+
+  ```ruby
+  Spork.each_run do
+    # This code will be run each time you run your specs.
+    load "#{Rails.root}/config/routes.rb"
+  end
+  ```
+
+   Then you need to add the `mount` to your `config/routes.rb` otherwise it gets removed by Spork's reload.
+
+   ```ruby
+   mount Webshims::Rails::Rewrite.new, at: '/webshims/shims'
+   ```
 
 ## Updating this gem
 
